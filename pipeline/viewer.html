@@ -1,0 +1,1476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Possession Viewer</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --line: #2a2f3a; --text: #e6e8ec; --muted: #8b93a1;
+    --H: #3b82f6; --A: #ef4444; --D: #9ca3af; --X: #232833;
+    --trk: #facc15; --vid: #22d3ee; --accent: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0 12px 0 0; font-weight: 600; }
+  main { padding: 12px 16px; max-width: 1400px; margin: 0 auto; }
+  button, select, input[type=number] {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+    padding: 5px 9px; font: inherit; }
+  button:hover { border-color: var(--muted); cursor: pointer; }
+  .stage { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 8px; overflow: hidden; }
+  .stage video, .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .stage canvas { pointer-events: none; }
+  .bar { display: flex; align-items: center; gap: 8px; margin: 10px 0; flex-wrap: wrap; }
+  .bar .sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
+  .readout { font-variant-numeric: tabular-nums; min-width: 210px; }
+  .muted { color: var(--muted); }
+  label.chk { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+  .lanes { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
+  .lanes h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
+  .lane { display: grid; grid-template-columns: 210px 1fr; align-items: center; gap: 10px; margin: 4px 0; }
+  .lane .name { display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; }
+  .lane .name span.t { overflow: hidden; text-overflow: ellipsis; }
+  .lane canvas { width: 100%; height: 18px; display: block; border-radius: 3px; cursor: pointer; }
+  .lane.off canvas { opacity: .35; }
+  .band .tagf { display: inline-block; width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+  .lane .grip { cursor: grab; color: var(--muted); user-select: none; padding: 0 2px; }
+  .lane.dragging { opacity: .4; }
+  .lane.over-before { box-shadow: 0 -2px 0 var(--accent); }
+  .lane.over-after { box-shadow: 0 2px 0 var(--accent); }
+  .x { padding: 0 6px; line-height: 18px; color: var(--muted); }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 6px; flex-wrap: wrap; }
+  #drop { position: fixed; inset: 0; background: rgba(167,139,250,.15); border: 3px dashed var(--accent);
+          display: none; align-items: center; justify-content: center; font-size: 22px; z-index: 10; }
+  #msg { color: #fca5a5; }
+  .speed { display: inline-flex; align-items: center; gap: 6px; }
+  .speed input { width: 140px; accent-color: var(--accent); cursor: pointer; }
+  .speed output { font-variant-numeric: tabular-nums; min-width: 3.2em; }
+  .speed output.slow { color: #fca5a5; }
+  @media (max-width: 700px) { .lane { grid-template-columns: 120px 1fr; } }
+  /* side panel: discrepancy report */
+  main { max-width: 1800px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; align-items: start; }
+  .layout > .col { min-width: 0; }
+  .report { position: sticky; top: 12px; max-height: calc(100vh - 24px); display: flex; flex-direction: column;
+            background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .report h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
+  .report .row.types { display: grid; grid-template-columns: 74px 1fr; align-items: center; gap: 6px; margin: 3px 0; font-size: 12px; color: var(--muted); }
+  .report #repTypesBox { position: relative; }
+  .report #repTypesSum { list-style: none; cursor: pointer; padding: 2px 6px; border: 1px solid var(--line); border-radius: 4px;
+                         background: var(--panel); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .report #repTypesSum::-webkit-details-marker { display: none; }
+  .report #repTypesSum::after { content: " ▾"; color: var(--muted); }
+  .report #repTypes { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 2px); display: flex; flex-direction: column; gap: 3px;
+                      padding: 6px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,.5); }
+  .report #repTypes label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; color: var(--text); white-space: nowrap; }
+  .report #repTypes button { font-size: 11px; padding: 0 6px; align-self: flex-start; }
+  .report label.row { display: grid; grid-template-columns: 74px 1fr; align-items: center; gap: 6px; margin: 3px 0; font-size: 12px; color: var(--muted); }
+  .report select { width: 100%; min-width: 0; font-size: 12px; padding: 3px 6px; }
+  .report .tools { display: flex; gap: 6px; margin: 6px 0; }
+  .report .tools button { font-size: 12px; padding: 3px 8px; }
+  .report .sum { font-size: 12px; color: var(--muted); margin: 2px 0 6px; }
+  .rep-costs > summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .rep-table { width: 100%; border-collapse: collapse; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .rep-table th, .rep-table td { padding: 2px 4px; text-align: right; border-bottom: 1px solid var(--line); }
+  .rep-table th:first-child, .rep-table td:first-child { text-align: left; }
+  .rep-table th { font-weight: 600; color: var(--muted); }
+  .rep-table td { color: var(--text); }
+  .rep-table tfoot td { border-bottom: 0; color: var(--muted); }
+  .kdot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; background: var(--muted); }
+  .kdot.invented { background: #f59e0b; } .kdot.missed { background: #a78bfa; } .kdot.deadinv { background: var(--D); }
+  .kdot.deadmiss { background: #e2e8f0; } .kdot.deadshift { background: #64748b; } .kdot.misaligned { background: #22d3ee; }
+  .kdot.wrongteam { background: #f43f5e; }
+  .report details.why { font-size: 12px; margin: 0 0 6px; border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; }
+  .report details.why summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+  .report details.why[open] summary { margin-bottom: 4px; }
+  #repWhyBody { max-height: 40vh; overflow-y: auto; color: var(--muted); }
+  #repWhyBody p { margin: 4px 0; }
+  .why-table td:first-child { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .why-table tbody tr { cursor: pointer; } .why-table tbody tr:hover td { background: #1c2029; }
+  .why-table td.pos { color: #fca5a5; } .why-table td.neg { color: #86efac; }
+  .why-flips span { display: inline-block; margin: 1px 6px 1px 0; color: var(--text); }
+  .report .warn { font-size: 12px; color: #fca5a5; margin: 2px 0 6px; }
+  .rep-list { overflow-y: auto; flex: 1; min-height: 120px; margin: 0 -4px; padding: 0 4px; position: relative; }
+  .rep-item { border: 1px solid var(--line); border-left: 4px solid var(--muted); border-radius: 6px; padding: 5px 8px;
+              margin: 0 0 5px; cursor: pointer; font-size: 12px; }
+  .rep-item:hover { border-color: var(--muted); }
+  .rep-item.on { background: #222634; border-color: var(--accent); }
+  .rep-item { position: relative; padding-right: 44px; }
+  .rep-item .k { font-weight: 600; font-size: 13px; }
+  .rep-item .rank { position: absolute; top: 5px; right: 8px; font-size: 12px; font-weight: 600; color: var(--muted);
+                    font-variant-numeric: tabular-nums; }
+  .rep-item.on .rank { color: var(--accent); }
+  .rep-table tbody tr { cursor: pointer; } .rep-table tbody tr:hover td { background: #1c2029; }
+  .rep-table tbody tr.on td { background: #222634; color: var(--accent); }
+  .rep-item .m { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .rep-item.invented { border-left-color: #f59e0b; } .rep-item.missed { border-left-color: #a78bfa; }
+  .rep-item.deadinv { border-left-color: var(--D); } .rep-item.deadmiss { border-left-color: #e2e8f0; } .rep-item.deadshift { border-left-color: #64748b; } .rep-item.misaligned { border-left-color: #22d3ee; }
+  .rep-item.wrongteam { border-left-color: #f43f5e; }
+  .rep-item textarea.note { display: block; width: 100%; margin-top: 4px; resize: none; overflow: hidden; min-height: 24px;
+                            background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px;
+                            padding: 3px 6px; font: 12px/1.4 inherit; font-family: inherit; cursor: text; }
+  .rep-item textarea.note:focus { outline: none; border-color: var(--accent); }
+  .rep-item .nw { position: relative; }
+  .rep-item .sug { position: absolute; left: 0; right: 0; top: 100%; z-index: 20; margin-top: 2px; background: #11141b;
+                   border: 1px solid var(--line); border-radius: 4px; max-height: 180px; overflow-y: auto;
+                   box-shadow: 0 6px 16px rgba(0,0,0,.5); font-size: 12px; }
+  .rep-item .sug .opt { display: flex; gap: 8px; justify-content: space-between; padding: 3px 6px; cursor: pointer; white-space: pre-wrap; }
+  .rep-item .sug .opt.on, .rep-item .sug .opt:hover { background: #222634; color: var(--accent); }
+  .rep-item .sug .c { color: var(--muted); flex: none; }
+  .rep-item .sug .h { padding: 2px 6px; color: var(--muted); font-size: 11px; border-top: 1px solid var(--line); }
+  .rep-item .tn { margin-top: 4px; padding: 3px 6px; border-left: 2px solid var(--line); font-size: 12px; white-space: pre-wrap; }
+  .rep-item .tn b { color: var(--muted); font-weight: 600; }
+  .rep-item .ns { font-size: 11px; color: var(--muted); min-height: 0; }
+  .rep-item .ns.bad { color: #fca5a5; }
+  /* black band over the bottom of the video: the pipeline's numbers at the playhead */
+  .band { position: absolute; left: 0; right: 0; bottom: 0; background: #000; color: #e5e7eb;
+          font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 4px 10px;
+          display: flex; flex-wrap: wrap; gap: 4px 16px; font-variant-numeric: tabular-nums; }
+  .band b { color: #9ca3af; font-weight: 400; }
+  .band .scores { margin-left: auto; }               /* right-aligned, with the jump button after it */
+  .band .bjump { font: inherit; font-size: 11px; padding: 0 8px; line-height: 18px; min-width: 28ch; text-align: center;
+                 background: #111; color: #6b7280; border: 1px solid #374151; border-radius: 4px; cursor: default; }
+  .band .bjump.live { color: #e5e7eb; border-color: var(--accent); cursor: pointer; }
+  .band .bjump.live:hover { background: #1f2937; }
+  .band .hov { cursor: help; text-decoration: underline dotted #6b7280; text-underline-offset: 3px; }
+  .band .vbox { border: 1px solid #374151; border-radius: 4px; padding: 0 6px; transition: background .15s, box-shadow .15s;
+                display: inline-block; min-width: 13ch; text-align: center; }
+  /* fixed widths, so values changing length (keep/switch, +1.2/-12.34) never move the rest of the band */
+  .band .num { display: inline-block; text-align: right; min-width: 6.5ch; }
+  #bFrame { display: inline-block; min-width: 7ch; text-align: right; } #bP { display: inline-block; min-width: 4ch; }
+  #bDead { display: inline-block; min-width: 4ch; } #bEvid { display: inline-block; min-width: 1ch; }
+  #bCmp { display: inline-block; min-width: 13ch; }
+  /* score and log-odds around the playhead */
+  .plot { width: 100%; height: 160px; display: block; margin-top: 6px; border-radius: 3px; cursor: pointer; }
+  .plot-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .plot-legend .ln { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 4px; }
+  .band .vbox.sw { background: #f59e0b; border-color: #f59e0b; color: #000; box-shadow: 0 0 8px #f59e0b; }
+  .band .vbox.sw span { color: #000; }
+  .band .vbox.flash { animation: vflash .6s ease-out; }
+  @keyframes vflash { 0% { background: #fde047; border-color: #fde047; color: #000; box-shadow: 0 0 16px #fde047; } }
+  .tip { position: absolute; z-index: 5; display: none; pointer-events: none; white-space: pre; max-width: calc(100% - 12px); overflow: hidden;
+         background: rgba(0, 0, 0, .92); border: 1px solid #374151; border-radius: 6px; padding: 8px 10px;
+         font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #e5e7eb; }
+  #deadTip { width: 100ch; pointer-events: auto; overflow: auto; overscroll-behavior: contain; }   /* fixed width, so the text doesn't
+                                                     shift as frames change; hoverable and scrollable, its height capped to the screen */
+  .tip b { color: #9ca3af; font-weight: 600; } .tip i { color: #a5b4fc; font-style: normal; white-space: normal; display: inline-block; max-width: 64ch; vertical-align: top; } .tip .D { color: var(--D); } .tip .chg { color: #facc15; font-weight: 600; } .tip .bad { color: #fca5a5; }
+  .band .H { color: var(--H); } .band .A { color: var(--A); } .band .D { color: var(--D); }
+  .band .bad { color: #fca5a5; } .band .ok { color: #86efac; }
+  @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } .report { position: static; max-height: 70vh; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Possession viewer</h1>
+  <select id="resultPick"><option value="">Add from evaluation/results…</option></select>
+  <button id="reloadBtn" title="Fetch the newest copy of McDonald's_Workers.csv and of every loaded track from evaluation/results/">↻ Reload results</button>
+  <label><button id="fileBtn">Open CSV…</button><input id="file" type="file" accept=".csv" multiple hidden></label>
+  <span class="muted">or drop CSVs anywhere</span>
+  <span id="msg"></span>
+</header>
+<main>
+<div class="layout">
+<div class="col">
+  <div class="stage">
+    <video id="video" src="/video" preload="auto" muted playsinline></video>
+    <canvas id="overlay"></canvas>
+    <div class="band" id="band"></div>
+    <div class="tip" id="deadTip"></div>
+  </div>
+
+  <div class="bar">
+    <button id="play" title="Space">▶︎ Play</button>
+    <button id="back" title="Shift+←: 1 s back">−1 s</button>
+    <button id="prevF" title="←">‹ frame</button>
+    <button id="nextF" title="→">frame ›</button>
+    <button id="fwd" title="Shift+→: 1 s forward">+1 s</button>
+    <label class="speed" title="Playback speed, 0.25–4× (− / = keys, double-click for 1×)">
+      <input id="speed" type="range" min="0.25" max="4" step="0.25" value="1">
+      <output id="speedVal">1×</output>
+    </label>
+    <span class="sep"></span>
+    <button id="prevC" title="[ : previous change in the jump track">⟨ change</button>
+    <button id="nextC" title="] : next change in the jump track">change ⟩</button>
+    <button id="prevD" title=", : previous block of frames where the shown tracks disagree">⟨ diff</button>
+    <button id="nextD" title=". : next block of frames where the shown tracks disagree">diff ⟩</button>
+    <span class="sep"></span>
+    <input id="goto" type="number" min="0" placeholder="frame" style="width:110px">
+    <button id="publicWin" title="Jump to the public ground-truth window">Public 5 min</button>
+    <span class="sep"></span>
+    <span class="readout" id="readout">—</span>
+  </div>
+
+  <div class="bar">
+    <label class="chk"><input type="checkbox" id="showTrk" checked><span class="sw" style="background:var(--trk)"></span>Tracking ball</label>
+    <label class="chk"><input type="checkbox" id="showVid" checked><span class="sw" style="background:var(--vid)"></span>Video detection</label>
+    <span class="sep"></span>
+    <label class="chk" title="m: sound on/off (the stadium audio, whistles included)"><input type="checkbox" id="sound">Sound</label>
+    <label class="speed" title="Volume"><input id="volume" type="range" min="0" max="1" step="0.05" value="1"></label>
+    <span class="sep"></span>
+    <label class="chk" title="The pipeline's numbers at the playhead, in a band over the bottom of the video"><input type="checkbox" id="showBand" checked>Diagnostics band</label>
+    <span class="sep"></span>
+    <span class="muted" id="ballNote"></span>
+  </div>
+
+  <div class="lanes">
+    <h2>Around the playhead (±20 s)</h2>
+    <div id="detail"></div>
+    <canvas class="plot" id="plot"></canvas>
+    <div class="plot-legend" id="plotLegend">
+      <span><span class="ln" style="background:#e5e7eb"></span>score (log-odds + video clue)</span>
+      <span><span class="ln" style="background:var(--accent)"></span>log-odds</span>
+      <span><span class="sw" style="background:#3a3f4b"></span> dead mask</span>
+      <span>above 0 leans <span id="plotH">home</span>, below <span id="plotA">away</span> · symmetric log axis (±1 is half the height), ±10 max, clipped</span>
+    </div>
+  </div>
+  <div class="lanes">
+    <h2>Whole match — click to jump · ☑ show on video and compare in ⟨ diff ⟩ · ◉ jump track · drag ⠿ to reorder · × remove</h2>
+    <div id="overview"></div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--H)"></span> H · <span id="teamH">home</span></span>
+      <span><span class="sw" style="background:var(--A)"></span> A · <span id="teamA">away</span></span>
+      <span><span class="sw" style="background:var(--D)"></span> D · dead ball</span>
+      <span><span class="sw" style="background:var(--X)"></span> X · not graded</span>
+      <span>Tracking ball is projected through the homography and can sit 5–35 px off.</span>
+    </div>
+  </div>
+</div>
+<aside class="report">
+  <h2>Discrepancy report</h2>
+  <label class="row">Submission <select id="repPred"></select></label>
+  <label class="row">Reference <select id="repRef"></select></label>
+  <label class="row">Minor <select id="repMinor">
+    <option value="0">Show all misaligned (spells and dead mask)</option>
+    <option value="13">Hide misaligned under 0.5 s</option>
+    <option value="25">Hide misaligned under 1 s</option>
+    <option value="50">Hide misaligned under 2 s</option>
+    <option value="125">Hide misaligned under 5 s</option>
+  </select></label>
+  <div class="row types"><span>Type</span><details id="repTypesBox"><summary id="repTypesSum">All types</summary>
+    <div id="repTypes" title="Tick the types to list; none ticked lists all"></div></details></div>
+  <label class="row">Sort <select id="repSort">
+    <option value="time">By time</option>
+    <option value="cost">By spellF1 cost (biggest first)</option>
+  </select></label>
+  <div class="tools"><button id="repCsv" title="Download the listed discrepancies with the pipeline's numbers">⬇ CSV report</button></div>
+  <div class="sum" id="repSum"></div>
+  <div class="warn" id="repWarn"></div>
+  <details class="why" id="repWhy"><summary>Why these errors (model features)</summary><div id="repWhyBody"></div></details>
+  <div class="rep-list" id="repList"></div>
+</aside>
+</div>
+</main>
+<div id="drop">Drop submission CSVs to add them</div>
+
+<script>
+"use strict";
+const CODES = { X: 0, H: 1, A: 2, D: 3 }, LETTERS = "XHAD";
+const COLORS = {}; for (const k of LETTERS) COLORS[k] = getComputedStyle(document.documentElement).getPropertyValue("--" + k).trim();
+const MISSING = -32768, SRC_W = 1920, SRC_H = 1080, DETAIL_FRAMES = 500, STORE = "mtah-viewer:v1";
+const $ = id => document.getElementById(id);
+const video = $("video"), overlay = $("overlay"), ctx = overlay.getContext("2d");
+
+let meta = null, ball = null, frame = 0, tracks = [], jumpId = null, speed = 1, probe = null, sound = false, volume = 1;
+const GT_NAME = "Public ground truth (first 5 min)";
+let publicGt = null;                                 // its labels, kept even if its lane is removed
+let gtLabels = null, savedOrder = [], dragTrack = null;   // savedOrder: track names in the last saved lane order
+
+// ---------------------------------------------------------------- storage (per-viewer cache) ----
+function rle(labels) {
+  const out = []; let i = 0;
+  while (i < labels.length) { let j = i; while (j < labels.length && labels[j] === labels[i]) j++; out.push(LETTERS[labels[i]] + (j - i)); i = j; }
+  return out.join(",");
+}
+function unrle(s, n) {
+  const a = new Uint8Array(n); let i = 0;
+  for (const part of s.split(",")) { const c = CODES[part[0]] || 0, k = +part.slice(1); a.fill(c, i, Math.min(n, i + k)); i += k; }
+  return a;
+}
+function save() {
+  try {
+    const keep = tracks.map(t => t.builtin ? { name: t.name, builtin: true, show: t.show } : { name: t.name, show: t.show, rle: rle(t.labels) });
+    const rep = { pred: repWant.repPred || $("repPred").value, ref: repWant.repRef || (repRefChosen ? $("repRef").value : ""), minor: $("repMinor").value, sort: $("repSort").value, type: [...selectedTypes()], band: $("showBand").checked, why: $("repWhy").open, costs: costsOpen };
+    localStorage.setItem(STORE, JSON.stringify({ tracks: keep, jump: jumpId, frame, speed, sound, volume, rep }));
+  } catch (e) { /* private window or full storage: the page still works, it just forgets */ }
+}
+function loadSaved() {
+  try { return JSON.parse(localStorage.getItem(STORE) || "null"); } catch (e) { return null; }
+}
+
+// ---------------------------------------------------------------------------------- tracks ----
+function parseCsv(text, n) {
+  const a = new Uint8Array(n); let rows = 0, bad = 0;
+  const lines = text.split(/\r?\n/);
+  for (let k = 1; k < lines.length; k++) {
+    const line = lines[k]; if (!line) continue;
+    const comma = line.indexOf(","), next = line.indexOf(",", comma + 1);   // extra columns (frame,label,notes) are ignored
+    const f = +line.slice(0, comma), c = CODES[line.slice(comma + 1, next < 0 ? undefined : next).trim()];
+    if (!(f >= 0 && f < n) || c === undefined) { bad++; continue; }
+    a[f] = c; rows++;
+  }
+  if (!/^frame,label/i.test(lines[0] || "")) throw new Error("expected a 'frame,label' header");
+  return { labels: a, rows, bad };
+}
+function addTrack(name, labels, opts = {}) {
+  const old = tracks.findIndex(t => t.name === name);
+  const t = { id: name, name, labels, show: opts.show ?? true, builtin: !!opts.builtin, changes: changesOf(labels) };
+  if (old >= 0) tracks[old] = t; else tracks.push(t);
+  if (!jumpId || (!t.builtin && tracks.find(x => x.id === jumpId)?.builtin)) jumpId = t.id;
+  renderLanes(); save(); draw();
+}
+function changesOf(labels) {             // frames where a graded label differs from the previous graded one
+  const out = []; let prev = -1;
+  for (let i = 0; i < labels.length; i++) { const c = labels[i]; if (c === 0) continue; if (prev !== -1 && c !== prev) out.push(i); prev = c; }
+  return out;
+}
+async function addCsvText(name, text) {
+  try {
+    const { labels, rows, bad } = parseCsv(text, meta.n_frames);
+    addTrack(name, labels);
+    msg(rows < meta.n_frames || bad ? `${name}: ${rows.toLocaleString()} rows read, ${bad} skipped (missing frames shown as X)` : "");
+  } catch (e) { msg(`${name}: ${e.message}`); }
+}
+function msg(s) { $("msg").textContent = s; }
+// Insert a track that arrives late where the saved order had it, else at `fallback`.
+function insertTrack(t, fallback) {
+  const rank = name => { const i = savedOrder.indexOf(name); return i < 0 ? Infinity : i; }, r = rank(t.name);
+  let i = r === Infinity ? Math.min(fallback, tracks.length) : tracks.findIndex(u => rank(u.name) > r);
+  tracks.splice(i < 0 ? tracks.length : i, 0, t);
+}
+function removeTrack(t) {
+  tracks = tracks.filter(u => u !== t);
+  if (jumpId === t.id) jumpId = tracks[0]?.id ?? null;
+  renderLanes(); save(); draw();
+}
+function moveTrack(t, target, after) {          // put t just before (or after) target
+  if (t === target) return;
+  tracks = tracks.filter(u => u !== t);
+  tracks.splice(tracks.indexOf(target) + (after ? 1 : 0), 0, t);
+  renderLanes(); save(); draw();
+}
+
+// ----------------------------------------------------------------------------------- lanes ----
+function renderLanes() {
+  for (const [boxId, kind] of [["detail", "detail"], ["overview", "overview"]]) {
+    const box = $(boxId); box.innerHTML = "";
+    for (const t of tracks) {
+      const row = document.createElement("div"); row.className = "lane" + (t.show ? "" : " off");
+      const name = document.createElement("div"); name.className = "name";
+      if (kind === "overview") {
+        const grip = document.createElement("span"); grip.className = "grip"; grip.textContent = "⠿"; grip.title = "Drag to reorder";
+        grip.draggable = true;
+        grip.ondragstart = ev => { dragTrack = t; ev.dataTransfer.effectAllowed = "move"; ev.dataTransfer.setData("text/plain", t.id);
+                                   ev.dataTransfer.setDragImage(row, 10, 10); row.classList.add("dragging"); };
+        grip.ondragend = () => { dragTrack = null; for (const r of box.children) r.classList.remove("dragging", "over-before", "over-after"); };
+        const after = ev => { const r = row.getBoundingClientRect(); return ev.clientY > r.top + r.height / 2; };
+        row.ondragover = ev => { if (!dragTrack) return; ev.preventDefault(); ev.stopPropagation();
+                                 const a = after(ev); row.classList.toggle("over-after", a); row.classList.toggle("over-before", !a); };
+        row.ondragleave = () => row.classList.remove("over-before", "over-after");
+        row.ondrop = ev => { if (!dragTrack) return; ev.preventDefault(); ev.stopPropagation();
+                             const d = dragTrack; dragTrack = null; moveTrack(d, t, after(ev)); };
+        name.append(grip);
+        const chk = document.createElement("input"); chk.type = "checkbox"; chk.checked = t.show; chk.title = "Show on the video";
+        chk.onchange = () => { t.show = chk.checked; renderLanes(); save(); draw(); };
+        const rad = document.createElement("input"); rad.type = "radio"; rad.name = "jump"; rad.checked = t.id === jumpId; rad.title = "Jump track for ⟨ change ⟩";
+        rad.onchange = () => { jumpId = t.id; save(); };
+        name.append(chk, rad);
+      }
+      const label = document.createElement("span"); label.className = "t"; label.textContent = t.name; label.title = t.name;
+      name.append(label);
+      if (kind === "overview") {
+        const x = document.createElement("button"); x.className = "x"; x.textContent = "×";
+        x.title = t.builtin ? "Remove (it comes back when the page reloads)" : "Remove";
+        x.onclick = () => removeTrack(t);
+        name.append(x);
+      }
+      const cv = document.createElement("canvas"); cv.dataset.kind = kind; cv.track = t;
+      cv.onclick = ev => {
+        const r = cv.getBoundingClientRect(), u = (ev.clientX - r.left) / r.width;
+        seek(kind === "overview" ? Math.floor(u * meta.n_frames) : frame + Math.round((u - 0.5) * 2 * DETAIL_FRAMES));
+      };
+      row.append(name, cv); box.append(row);
+    }
+  }
+  sizeCanvases(); drawOverview(); drawDetail();
+  renderReportPicks();                               // tracks came or went: refresh the report's choices
+}
+function sizeCanvases() {
+  const dpr = window.devicePixelRatio || 1;
+  for (const cv of document.querySelectorAll(".lane canvas")) { cv.width = Math.max(1, Math.round(cv.clientWidth * dpr)); cv.height = Math.round(18 * dpr); }
+  const plot = $("plot"); plot.width = Math.max(1, Math.round(plot.clientWidth * dpr)); plot.height = Math.round(plot.clientHeight * dpr);
+  overlay.width = Math.round(overlay.clientWidth * dpr); overlay.height = Math.round(overlay.clientHeight * dpr);
+}
+function drawOverview() {
+  for (const cv of document.querySelectorAll('canvas[data-kind="overview"]')) {
+    const t = cv.track, g = cv.getContext("2d"), W = cv.width, n = meta.n_frames;
+    g.fillStyle = COLORS.X; g.fillRect(0, 0, W, cv.height);
+    for (let x = 0; x < W; x++) {                     // majority label per pixel column
+      const a = Math.floor(x * n / W), b = Math.floor((x + 1) * n / W), cnt = [0, 0, 0, 0];
+      for (let i = a; i < b; i += 1 + ((b - a) >> 6)) cnt[t.labels[i]]++;
+      let best = 0; for (let c = 1; c < 4; c++) if (cnt[c] > cnt[best] || (best === 0 && cnt[c] > 0)) best = c;
+      if (best) { g.fillStyle = COLORS[LETTERS[best]]; g.fillRect(x, 0, 1, cv.height); }
+    }
+    cv.base = g.getImageData(0, 0, W, cv.height);
+  }
+  drawPlayheads();
+}
+function drawPlayheads() {
+  for (const cv of document.querySelectorAll('canvas[data-kind="overview"]')) {
+    if (!cv.base || cv.base.width !== cv.width) continue;
+    const g = cv.getContext("2d"); g.putImageData(cv.base, 0, 0);
+    const x = Math.round(frame / meta.n_frames * cv.width); g.fillStyle = "#fff"; g.fillRect(x - 1, 0, 2, cv.height);
+  }
+}
+function drawDetail() {
+  for (const cv of document.querySelectorAll('canvas[data-kind="detail"]')) {
+    const t = cv.track, g = cv.getContext("2d"), W = cv.width, H = cv.height, n = meta.n_frames;
+    g.fillStyle = COLORS.X; g.fillRect(0, 0, W, H);
+    for (let x = 0; x < W; x++) {
+      const f = frame - DETAIL_FRAMES + Math.floor(x * 2 * DETAIL_FRAMES / W);
+      if (f < 0 || f >= n) continue;
+      const c = t.labels[f]; if (c) { g.fillStyle = COLORS[LETTERS[c]]; g.fillRect(x, 0, 1, H); }
+    }
+    g.fillStyle = "#fff"; g.fillRect(Math.floor(W / 2) - 1, 0, 2, H);
+  }
+  drawPlot();
+}
+
+// The pipeline's score (log-odds + video clue) and the model's log-odds over the detail window, with
+// the dead mask shaded. A fixed ±PLOT_MAX axis so the scale doesn't jump as the playhead moves, on a
+// symmetric log scale (symlog): about linear within ±PLOT_LIN of 0, logarithmic beyond, so the close
+// calls between -1 and +1 take half the height while ±10 still fits. Values beyond ±PLOT_MAX are clipped.
+const PLOT_MAX = 10, PLOT_LIN = 0.1, PLOT_TICKS = [0.1, 0.5, 1, 3, 10];
+const symlog = v => Math.sign(v) * Math.log1p(Math.abs(v) / PLOT_LIN) / Math.log1p(PLOT_MAX / PLOT_LIN);
+function drawPlot() {
+  const cv = $("plot"); if (!cv || !meta) return;
+  const g = cv.getContext("2d"), W = cv.width, H = cv.height, n = meta.n_frames, dpr = window.devicePixelRatio || 1;
+  g.fillStyle = "#12151b"; g.fillRect(0, 0, W, H);
+  g.fillStyle = "rgba(59,130,246,.07)"; g.fillRect(0, 0, W, H / 2);           // home side
+  g.fillStyle = "rgba(239,68,68,.07)"; g.fillRect(0, H / 2, W, H / 2);        // away side
+  g.font = `${10 * dpr}px -apple-system, sans-serif`; g.textBaseline = "middle";
+  if (!diag) { g.fillStyle = "#8b93a1"; g.fillText("no pipeline numbers: python -m pipeline.viewer --diagnostics", 8 * dpr, H / 2); return; }
+  const fx = x => frame - DETAIL_FRAMES + Math.floor(x * 2 * DETAIL_FRAMES / W);
+  const pad = 5 * dpr, y = v => H / 2 - symlog(Math.max(-PLOT_MAX, Math.min(PLOT_MAX, v))) * (H / 2 - pad);
+  g.fillStyle = "#3a3f4b";                                                      // dead mask
+  for (let x = 0; x < W; x++) { const f = fx(x); if (f >= 0 && f < n && diag.dead[f]) g.fillRect(x, 0, 1, H); }
+  g.strokeStyle = "#2a2f3a"; g.lineWidth = 1; g.setLineDash([3 * dpr, 3 * dpr]);
+  for (const t of PLOT_TICKS.slice(0, -1)) for (const v of [-t, t]) { g.beginPath(); g.moveTo(0, y(v)); g.lineTo(W, y(v)); g.stroke(); }
+  g.setLineDash([]); g.strokeStyle = "#4b5563"; g.beginPath(); g.moveTo(0, y(0)); g.lineTo(W, y(0)); g.stroke();
+  const line = (value, color, width) => {
+    g.strokeStyle = color; g.lineWidth = width; g.beginPath(); let on = false;
+    for (let x = 0; x < W; x++) {
+      const f = fx(x);
+      if (f < 0 || f >= n || !diag.vit[f]) { on = false; continue; }            // not graded: break the line
+      const yy = y(value(f)); if (on) g.lineTo(x, yy); else { g.moveTo(x, yy); on = true; }
+    }
+    g.stroke();
+  };
+  line(f => diag.lo[f], COLORS_PLOT.lo, 1.2 * dpr);
+  line(f => diag.lo[f] + diag.vid[f], COLORS_PLOT.score, 1.6 * dpr);
+  g.fillStyle = "#fff"; g.fillRect(Math.floor(W / 2) - 1, 0, 2, H);           // playhead
+  g.fillStyle = "#8b93a1";                                                      // tick labels on the left
+  g.fillText("0", 4 * dpr, y(0) - 6 * dpr);
+  for (const t of PLOT_TICKS) {
+    const top = t === PLOT_MAX ? pad + 4 * dpr : y(t), bottom = t === PLOT_MAX ? H - pad - 4 * dpr : y(-t);
+    g.fillText(`+${t}${t === PLOT_MAX ? " H" : ""}`, 4 * dpr, top); g.fillText(`−${t}${t === PLOT_MAX ? " A" : ""}`, 4 * dpr, bottom);
+  }
+  const s = diag.lo[frame] + diag.vid[frame], t = `score ${fmt(s)} · log-odds ${fmt(diag.lo[frame])}`;
+  g.fillStyle = "#e5e7eb"; g.fillText(t, Math.floor(W / 2) + 6 * dpr, pad + 4 * dpr);
+}
+const COLORS_PLOT = { score: "#e5e7eb", lo: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() };
+
+// ---------------------------------------------------------------------- discrepancy report ----
+// Compares a submission with a reference on frames both grade. Each maximal run of frames with
+// the same (submission, reference) pair of different labels is one discrepancy. With D on one side,
+// it is a misaligned dead mask when the tracks agree on D at exactly one end (the same stoppage,
+// starting or ending at a different frame); else an invented dead mask if the submission has the D
+// (a stoppage the reference doesn't have) or a missed one if the reference has it (a stoppage, or
+// part of one, the submission plays through). Otherwise it is judged by the labels both tracks agree on just outside it:
+// whichever track needs more H<->A switches there has the extra transition (invented if it's the
+// submission, missed if it's the reference); one switch each, at different frames, is a misaligned
+// spell; no switch on either side (stoppage or ungraded at both ends) is a whole spell given to the wrong team.
+const KINDS = { invented: "Invented transition", missed: "Missed transition",
+                deadinv: "Invented dead mask", deadmiss: "Missed dead mask", deadshift: "Misaligned dead mask", misaligned: "Misaligned spells", wrongteam: "Wrong team (whole spell)" };
+const MINOR_KINDS = new Set(["misaligned", "deadshift"]);   // what the Minor filter can hide
+let costsOpen = true;                                // the spellF1 cost table (collapsible, remembered)
+let diag = null, report = [], reportTimer = 0, repRefChosen = false, repOn = -1;
+let repByTime = [], repOtherByTime = [], repHiddenByTime = [];   // the listed (and hidden) discrepancies in time order, for the band's jump button
+let repWant = { repPred: "", repRef: "" };   // saved choices, applied once their track is loaded (some arrive late)
+
+function findDiscrepancies(P, R) {
+  const n = meta.n_frames, out = [], G = graded(n);  // only inside the halves, as the scores
+  const agreed = i => (i >= 0 && i < n && P[i] && P[i] === R[i]) ? P[i] : 0;
+  const isHA = c => c === 1 || c === 2;
+  for (let i = 0; i < n;) {
+    const p = P[i], r = R[i];
+    if (!p || !r || p === r || !G[i]) { i++; continue; }
+    let j = i + 1; while (j < n && G[j] && P[j] === p && R[j] === r) j++;
+    const L = agreed(i - 1), Rt = agreed(j);
+    let kind;
+    if (p === 3 || r === 3) kind = (L === 3) !== (Rt === 3) ? "deadshift" : p === 3 ? "deadinv" : "deadmiss";
+    else {
+      const sw = x => (isHA(L) && L !== x ? 1 : 0) + (isHA(Rt) && Rt !== x ? 1 : 0);
+      const ps = sw(p), rs = sw(r);
+      kind = ps > rs ? "invented" : ps < rs ? "missed" : ps ? "misaligned" : "wrongteam";
+    }
+    out.push({ kind, start: i, end: j, pred: LETTERS[p], ref: LETTERS[r], ...gapStats(i, j) });
+    i = j;
+  }
+  return out;
+}
+// The pipeline's numbers over [s, e): what the model, the video clue and the dead mask said there,
+// and whether Viterbi kept the frame-by-frame evidence (sign of the score) or switched it.
+function gapStats(s, e) {
+  if (!diag) return {};
+  const n = e - s; let loSum = 0, loMin = Infinity, loMax = -Infinity, vSum = 0, vN = 0, deadN = 0, kept = 0, switched = 0, sw = 0;
+  for (let f = s; f < e; f++) {
+    const lo = diag.lo[f], v = diag.vid[f], dead = diag.dead[f] > 0, vit = diag.vit[f];
+    loSum += lo; if (lo < loMin) loMin = lo; if (lo > loMax) loMax = lo;
+    vSum += v; if (v !== 0) vN++; if (dead) deadN++;
+    const raw = dead ? 3 : lo + v >= 0 ? 1 : 2;                    // ties read as H, as in the decoder
+    if (vit === raw) kept++; else switched++;
+  }
+  for (let f = Math.max(1, s); f <= Math.min(e, meta.n_frames - 1); f++) {   // H<->A switches touching the gap
+    const a = diag.vit[f - 1], b = diag.vit[f]; if ((a === 1 || a === 2) && (b === 1 || b === 2) && a !== b) sw++;
+  }
+  return { loMean: loSum / n, loMin, loMax, loSum, vMean: vSum / n, vN, vSum, score: loSum + vSum, deadN,
+           sw, swCost: sw * (diag.meta.p_switch || 0), kept, switched,
+           decision: switched === 0 ? "keep" : kept === 0 ? "switch" : "mixed" };
+}
+// The scoreboard's two headline metrics (evaluation/possession_metrics.py), submission P against
+// reference R: macro-F1 over H, A, D on the frames R grades, and spellF1, the mean over IoU 0.3..0.7
+// of the F1 of a one-to-one greedy match of possession spells, with P's X carried forward. Only frames
+// inside the two halves count (meta.halves, kickoff to the final whistle), as in the real ground
+// truth, which is X everywhere else: a reference labelling the pre-kickoff or half-time D would
+// otherwise charge every submission for its X there.
+const SPELL_IOUS = [0.3, 0.4, 0.5, 0.6, 0.7];
+let gradedCache = null;
+function graded(n) {                                 // (n,) 1 inside the halves (ends inclusive)
+  if (gradedCache && gradedCache.length === n) return gradedCache;
+  gradedCache = new Uint8Array(n);
+  for (const [a, b] of meta.halves) gradedCache.fill(1, a, Math.min(b + 1, n));
+  return gradedCache;
+}
+let scores = null;                                   // { macro, spell } for the report's pair
+function macroF1(P, R) {
+  const tp = [0, 0, 0, 0], fp = [0, 0, 0, 0], fn = [0, 0, 0, 0], G = graded(P.length);
+  for (let f = 0; f < P.length; f++) {
+    const r = R[f]; if (!r || !G[f]) continue;     // X in the reference, and frames outside the halves, are never scored
+    const p = P[f];
+    if (p === r) tp[r]++; else { fn[r]++; if (p) fp[p]++; }
+  }
+  let sum = 0;
+  for (const k of [1, 2, 3]) {
+    const pr = tp[k] + fp[k] ? tp[k] / (tp[k] + fp[k]) : 0, rc = tp[k] + fn[k] ? tp[k] / (tp[k] + fn[k]) : 0;
+    sum += pr + rc ? 2 * pr * rc / (pr + rc) : 0;
+  }
+  return sum / 3;
+}
+function spellF1(P, R) {
+  const n = P.length, runs = [], G = graded(n), on = f => R[f] && G[f];
+  for (let f = 0; f < n;) { if (!on(f)) { f++; continue; } let g = f; while (g < n && on(g)) g++; runs.push([f, g]); f = g; }
+  const spells = codes => {
+    const out = [];
+    for (const [a, b] of runs) {
+      let s = a; while (s < b) { let e = s + 1; while (e < b && codes[e] === codes[s]) e++; if (codes[s] === 1 || codes[s] === 2) out.push([s, e, codes[s]]); s = e; }
+    }
+    return out;
+  };
+  const filled = P.slice();                          // carry the submission's X forward, back-fill each run's head
+  for (const [a, b] of runs) {
+    let first = -1; for (let f = a; f < b; f++) if (filled[f]) { first = filled[f]; break; }
+    if (first < 0) continue;
+    let last = first; for (let f = a; f < b; f++) { if (filled[f]) last = filled[f]; else filled[f] = last; }
+  }
+  const gs = spells(R), ps = spells(filled), ov = [];
+  let j0 = 0;
+  for (let i = 0; i < gs.length; i++) {              // both lists are in time order: sweep the overlapping pairs
+    const [ga, gb, gc] = gs[i];
+    while (j0 < ps.length && ps[j0][1] <= ga) j0++;
+    for (let j = j0; j < ps.length && ps[j][0] < gb; j++) {
+      const [pa, pb, pc] = ps[j]; if (pc !== gc) continue;
+      ov.push([(Math.min(gb, pb) - Math.max(ga, pa)) / (Math.max(gb, pb) - Math.min(ga, pa)), i, j]);
+    }
+  }
+  ov.sort((x, y) => y[0] - x[0] || x[1] - y[1] || x[2] - y[2]);
+  let total = 0;
+  for (const t of SPELL_IOUS) {
+    const gUsed = new Uint8Array(gs.length), pUsed = new Uint8Array(ps.length); let tp = 0;
+    for (const [iou, i, j] of ov) { if (iou < t) break; if (gUsed[i] || pUsed[j]) continue; gUsed[i] = pUsed[j] = 1; tp++; }
+    const pr = ps.length ? tp / ps.length : 0, rc = gs.length ? tp / gs.length : 0;
+    total += pr + rc ? 2 * pr * rc / (pr + rc) : 0;
+  }
+  return total / SPELL_IOUS.length;
+}
+// Notes: one per (submission, reference, discrepancy), saved as you type to docs/report_notes.csv
+// through the server (gitignored; shared by sending the file). An emptied note is removed from it.
+// Teammates' files, saved as docs/report_notes_<name>.csv, are shown read-only above your own note.
+let notes = new Map();                               // key -> note text
+let sharedNotes = new Map();                         // key -> [{from, note}]
+const noteTimers = new Map();
+const noteKey = (sub, ref, start, last) => [sub, ref, start, last].join("|");
+async function loadNotes() {
+  try {
+    const { notes: rows, shared = [] } = await (await fetch("/notes")).json();
+    notes = new Map(rows.map(r => [noteKey(r.submission, r.reference, +r.start_frame, +r.end_frame), r.note]));
+    sharedNotes = new Map();
+    for (const r of shared) {
+      const key = noteKey(r.submission, r.reference, +r.start_frame, +r.end_frame);
+      if (!sharedNotes.has(key)) sharedNotes.set(key, []);
+      sharedNotes.get(key).push({ from: r.from, note: r.note });
+    }
+  } catch (e) { msg(`couldn't read the report notes: ${e.message}`); }
+}
+function saveNote(entry, status) {
+  const key = noteKey(entry.submission, entry.reference, entry.start_frame, entry.end_frame);
+  clearTimeout(noteTimers.get(key));
+  noteTimers.set(key, setTimeout(async () => {
+    noteTimers.delete(key);
+    try {
+      const r = await fetch("/notes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(entry) });
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      status.textContent = entry.note.trim() ? "saved to docs/report_notes.csv" : "removed"; status.className = "ns";
+    } catch (e) { status.textContent = `NOT saved (${e.message}): is the viewer still running?`; status.className = "ns bad"; }
+  }, 600));
+}
+// Existing notes to reuse on another box: yours (other boxes) and teammates', most used first. Every
+// typed word has to appear; notes that start with what's typed come first.
+function noteSuggestions(query, ownKey) {
+  const count = new Map(), add = t => { t = (t || "").trim(); if (t) count.set(t, (count.get(t) || 0) + 1); };
+  for (const [k, t] of notes) if (k !== ownKey) add(t);
+  for (const list of sharedNotes.values()) for (const s of list) add(s.note);
+  const q = query.trim().toLowerCase(), words = q.split(/\s+/).filter(Boolean), out = [];
+  for (const [t, n] of count) {
+    const low = t.toLowerCase();
+    if (low === q || !words.every(w => low.includes(w))) continue;
+    out.push({ t, n, rank: !q || low.startsWith(q) ? 0 : low.includes(q) ? 1 : 2 });
+  }
+  return out.sort((a, b) => a.rank - b.rank || b.n - a.n || a.t.localeCompare(b.t)).slice(0, 8);
+}
+const grow = ta => { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; };
+function reportSoon() { clearTimeout(reportTimer); reportTimer = setTimeout(buildReport, 250); }
+function renderReportPicks() {
+  const fill = (id, pick) => {
+    const sel = $(id), was = sel.value, have = v => v && tracks.some(t => t.id === v); sel.innerHTML = "";
+    for (const t of tracks) { const o = document.createElement("option"); o.value = t.id; o.textContent = t.name; sel.append(o); }
+    if (have(repWant[id])) { sel.value = repWant[id]; repWant[id] = ""; }
+    else sel.value = have(was) ? was : pick()?.id ?? "";
+  };
+  fill("repPred", () => tracks.find(t => t.id === jumpId && !t.builtin) || tracks.find(t => !t.builtin) || tracks[0]);
+  if (!repRefChosen || repWant.repRef) $("repRef").value = "";      // follow the default until someone picks one
+  fill("repRef", () => tracks.find(t => t.builtin && t.id !== GT_NAME) || tracks.find(t => t.id === GT_NAME) || tracks[0]);
+  reportSoon();
+}
+const fmt = (x, d = 2) => x === undefined || !isFinite(x) ? "—" : (x > 0 ? "+" : "") + x.toFixed(d);
+function buildReport() {
+  if (!meta) return;
+  if (document.activeElement?.classList.contains("note")) { reportSoon(); return; }   // don't pull the box from under someone typing
+  const pred = tracks.find(t => t.id === $("repPred").value), ref = tracks.find(t => t.id === $("repRef").value);
+  const list = $("repList"); list.innerHTML = ""; report = []; repOn = -1; $("repWarn").textContent = ""; scores = null;
+  repByTime = []; repOtherByTime = []; repHiddenByTime = [];
+  if (!pred || !ref || pred === ref) { $("repSum").textContent = "Pick two different tracks."; drawBand(); renderWhy(); return; }
+  scores = { spell: spellF1(pred.labels, ref.labels), macro: macroF1(pred.labels, ref.labels) };
+  drawBand();
+  const minor = +$("repMinor").value;
+  const all = findDiscrepancies(pred.labels, ref.labels);
+  // Cost of each: how much spellF1 would rise if only that one were fixed (the reference's labels
+  // copied over it). One at a time, so they don't add up exactly to the gap to 1: fixing two
+  // neighbours together can be worth more or less than the two apart, and fixing one alone can
+  // even cost (e.g. one edge of a spell put right while the other stays wrong).
+  const Q = pred.labels.slice();
+  for (const d of all) {
+    Q.set(ref.labels.subarray(d.start, d.end), d.start);
+    d.gain = spellF1(Q, ref.labels) - scores.spell;
+    Q.set(pred.labels.subarray(d.start, d.end), d.start);
+  }
+  // shown: what the Minor filter leaves (the table, the ranks); report: of those, the chosen type (the boxes, the CSV).
+  const shown = all.filter(d => !(MINOR_KINDS.has(d.kind) && d.end - d.start < minor));
+  [...shown].sort((a, b) => b.gain - a.gain || a.start - b.start).forEach((d, i) => { d.rank = i + 1; });   // 1 = costliest
+  const types = selectedTypes();                     // none ticked: every type
+  $("repTypesSum").textContent = !types.size ? "All types" : types.size === 1 ? KINDS[[...types][0]] : `${types.size} types`;
+  $("repTypesSum").title = [...types].map(k => KINDS[k]).join(", ") || "All types";
+  report = types.size ? shown.filter(d => types.has(d.kind)) : shown.slice();
+  if ($("repSort").value === "cost") report.sort((a, b) => a.rank - b.rank);
+  const counts = {}, cost = {}; for (const d of shown) { counts[d.kind] = (counts[d.kind] || 0) + 1; cost[d.kind] = (cost[d.kind] || 0) + d.gain; }
+  for (const d of shown) Q.set(ref.labels.subarray(d.start, d.end), d.start);
+  const allFixed = spellF1(Q, ref.labels);           // every shown one fixed at once
+  const hidden = all.length - shown.length, kinds = Object.keys(KINDS).filter(k => counts[k]).sort((a, b) => cost[b] - cost[a]);
+  const head = `<div>${shown.length.toLocaleString()} discrepancies` + (hidden ? ` · ${hidden.toLocaleString()} minor hidden` : "") +
+               (types.size ? ` · showing ${report.length} ${[...types].map(k => KINDS[k].toLowerCase()).join(" + ")}` : "") + ` · spellF1 ${scores.spell.toFixed(3)}</div>`;
+  $("repSum").innerHTML = head + (shown.length ? `<details class="rep-costs" id="repCosts"${costsOpen ? " open" : ""}>
+    <summary>spellF1 cost by type</summary><table class="rep-table">
+    <thead><tr><th>Type</th><th title="How many there are">Count</th><th title="spellF1 gained if each were fixed alone, summed over the type">spellF1 cost</th></tr></thead>
+    <tbody>${kinds.map(k => `<tr data-kind="${k}" class="${types.has(k) ? "on" : ""}" title="Tick or untick this type"><td><span class="kdot ${k}"></span>${KINDS[k]}</td><td>${counts[k]}</td><td>${cost[k].toFixed(3)}</td></tr>`).join("")}</tbody>
+    <tfoot><tr><td>All fixed together</td><td>${shown.length}</td><td>→ ${allFixed.toFixed(3)}</td></tr></tfoot>
+  </table></details>` : "");
+  const costsBox = $("repCosts");                   // rebuilt with every report: keep its open/closed state
+  if (costsBox) costsBox.ontoggle = () => { costsOpen = costsBox.open; save(); };
+  for (const tr of $("repSum").querySelectorAll("tbody tr")) tr.onclick = () => {
+    const box = $("repTypes").querySelector(`input[value="${tr.dataset.kind}"]`); box.checked = !box.checked; reportSoon(); save();
+  };
+  report.forEach((d, k) => { d.k = k; });
+  repByTime = [...report].sort((a, b) => a.start - b.start);
+  const listed = new Set(report), inShown = new Set(shown);
+  repOtherByTime = shown.filter(d => !listed.has(d));                   // filtered out by type; all in time order
+  repHiddenByTime = all.filter(d => !inShown.has(d));
+  if (!diag) $("repWarn").textContent = "No pipeline numbers: run python -m pipeline.viewer --diagnostics, then reload.";
+  else {
+    // An older submission file may carry the public ground truth on its window; the cached numbers
+    // never do, so frames where it equals that truth don't count.
+    let off = 0, pasted = 0;
+    for (let f = 0; f < meta.n_frames; f++) {
+      if (!pred.labels[f] || pred.labels[f] === diag.vit[f]) continue;
+      if (publicGt && publicGt[f] && pred.labels[f] === publicGt[f]) pasted++; else off++;
+    }
+    if (off) $("repWarn").textContent = `The numbers are from the current pipeline (built ${diag.meta.built}), which differs from ${pred.name} on ${off.toLocaleString()} frames` +
+                                        (pasted ? ` (not counting ${pasted.toLocaleString()} where it uses the public ground truth).` : ".");
+  }
+  renderWhy();
+  const frag = document.createDocumentFragment();
+  report.forEach((d, k) => {
+    const n = d.end - d.start, box = document.createElement("div");
+    box.className = "rep-item " + d.kind; box.dataset.k = k;
+    const what = d.kind.startsWith("dead") ? (d.pred === "D" ? "dead in submission, play in reference" : "play in submission, dead in reference")
+                                   : `submission ${d.pred} · reference ${d.ref}`;
+    box.innerHTML = `<span class="rank" title="Rank by spellF1 cost (1 = costliest), among all shown">#${d.rank}</span><div class="k">${KINDS[d.kind]}</div>
+      <div class="m">frame ${d.start.toLocaleString()} · ${n.toLocaleString()} frames (${(n / meta.fps).toFixed(1)} s) · ${clock(d.start)}</div>
+      <div class="m">${what} · <span title="spellF1 gained if only this one were fixed">spellF1 cost ${fmt(d.gain, 4)}</span></div>` + (diag ? `<div class="m">log-odds ${fmt(d.loMean)} avg · video ${fmt(d.vSum, 1)} · score Σ ${fmt(d.score, 1)} · dead ${d.deadN} · switches ${d.sw} · Viterbi ${d.decision}</div>` : "");
+    box.onclick = () => { video.pause(); seek(d.start); markReport(k); };
+    const key = noteKey(pred.id, ref.id, d.start, d.end - 1);
+    const ta = document.createElement("textarea"), status = document.createElement("div");
+    ta.className = "note"; ta.rows = 1; ta.placeholder = "note… (↓ for existing notes)"; ta.value = notes.get(key) || "";
+    ta.title = "Saved as you type to docs/report_notes.csv (send that file to share it)"; status.className = "ns";
+    for (const s of sharedNotes.get(key) || []) {
+      const tn = document.createElement("div"); tn.className = "tn"; tn.title = `from docs/report_notes_${s.from}.csv (read-only)`;
+      tn.innerHTML = `<b>${escHtml(s.from)}:</b> ${escHtml(s.note)}`; box.append(tn);
+    }
+    ta.onclick = e => e.stopPropagation();                         // typing here must not jump the video
+    const save = () => {
+      grow(ta);
+      if (ta.value.trim()) notes.set(key, ta.value); else notes.delete(key);
+      status.textContent = "saving…"; status.className = "ns";
+      saveNote({ submission: pred.id, reference: ref.id, start_frame: d.start, end_frame: d.end - 1, type: KINDS[d.kind], note: ta.value }, status);
+    };
+    // Suggestions under the note: ↑/↓ pick one, Enter or Tab puts it in, Esc closes.
+    const wrap = document.createElement("div"), sug = document.createElement("div");
+    wrap.className = "nw"; sug.className = "sug"; sug.hidden = true;
+    let items = [], pick = -1;
+    const close = () => { sug.hidden = true; items = []; pick = -1; };
+    const show = () => {
+      items = noteSuggestions(ta.value, key);
+      if (!items.length) return close();
+      pick = Math.min(pick, items.length - 1);
+      sug.innerHTML = items.map((s, i) => `<div class="opt${i === pick ? " on" : ""}" data-i="${i}"><span>${escHtml(s.t)}</span>` +
+                                        (s.n > 1 ? `<span class="c">×${s.n}</span>` : "") + "</div>").join("") +
+                      `<div class="h">↑↓ choose · Enter/Tab use · Esc close</div>`;
+      sug.hidden = false;
+      sug.children[pick]?.scrollIntoView({ block: "nearest" });
+    };
+    const accept = i => { ta.value = items[i].t; close(); save(); ta.setSelectionRange(ta.value.length, ta.value.length); };
+    sug.onmousedown = e => { e.preventDefault(); e.stopPropagation(); const o = e.target.closest(".opt"); if (o) accept(+o.dataset.i); };
+    sug.onclick = e => e.stopPropagation();
+    ta.onfocus = () => { pick = -1; show(); };
+    ta.onblur = close;
+    ta.onkeydown = e => {
+      e.stopPropagation();                                         // nor play it, step it, or trigger other shortcuts
+      const open = !sug.hidden;
+      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && (open || !ta.value.includes("\n"))) {
+        if (!open) { pick = -1; show(); if (sug.hidden) return; }
+        e.preventDefault();
+        const n = items.length;
+        pick = e.key === "ArrowDown" ? (pick + 1) % n : (pick <= 0 ? n - 1 : pick - 1);
+        show();
+      } else if ((e.key === "Enter" || e.key === "Tab") && open && pick >= 0 && !e.shiftKey) {
+        e.preventDefault(); accept(pick);
+      } else if (e.key === "Escape" && open) {
+        e.preventDefault(); close();
+      }
+    };
+    ta.oninput = () => { save(); pick = -1; show(); };
+    wrap.append(ta, sug);
+    box.append(wrap, status);
+    frag.append(box);
+  });
+  list.append(frag);
+  for (const ta of list.querySelectorAll("textarea.note")) if (ta.value) grow(ta);
+}
+// "Why these errors": over the listed boxes that come from the possession model (not the dead mask),
+// each feature's average push towards the submission's label (its TreeSHAP contribution, signed so +
+// means towards what the submission said) on the error frames, against the frames both tracks agree
+// on. Features far more positive on the errors pushed the model the wrong way; their rows jump to the
+// error where they did it most. Then, wherever the model's log-odds crossed zero inside an error, the
+// feature that pushed it hardest towards the new side.
+const MODEL_KINDS = new Set(["invented", "missed", "misaligned", "wrongteam"]);
+let shapFull = null, shapLoading = null, whyToken = 0;
+function f16Table() {                                // every float16 bit pattern -> its value
+  const t = new Float32Array(65536);
+  for (let h = 0; h < 65536; h++) {
+    const sg = h & 0x8000 ? -1 : 1, e = (h >> 10) & 31, m = h & 1023;
+    t[h] = e === 0 ? sg * m * 2 ** -24 : e === 31 ? (m ? NaN : sg * Infinity) : sg * (1 + m / 1024) * 2 ** (e - 15);
+  }
+  return t;
+}
+function loadShapFull() {
+  if (!shapLoading) shapLoading = (async () => {
+    const get = async u => { const r = await fetch(u); if (!r.ok) throw new Error(`${u}: ${r.status}`); return new Uint16Array(await r.arrayBuffer()); };
+    const [c, v] = await Promise.all([get("/shap_contribs"), get("/shap_values")]), F = diag.meta.shap.features.length;
+    if (c.length !== meta.n_frames * F || v.length !== c.length) throw new Error("wrong size: run python -m pipeline.viewer --diagnostics");
+    return (shapFull = { c, v, F, T: f16Table() });
+  })().catch(e => { shapLoading = null; throw e; });
+  return shapLoading;
+}
+async function renderWhy() {
+  const el = $("repWhyBody"), tok = ++whyToken;
+  if (!$("repWhy").open) return;
+  const pred = tracks.find(t => t.id === $("repPred").value), ref = tracks.find(t => t.id === $("repRef").value);
+  if (!diag?.meta.shap?.full) { el.innerHTML = "<p>Needs every feature's contribution: run python -m pipeline.viewer --diagnostics, then reload.</p>"; return; }
+  if (!pred || !ref || pred === ref) { el.innerHTML = ""; return; }
+  const boxes = report.filter(d => MODEL_KINDS.has(d.kind));
+  if (!boxes.length) {
+    el.innerHTML = report.length ? "<p>Dead-mask errors don't come from the possession model: hover <b>dead mask ⓘ</b> in the band for what made each one.</p>" : "<p>No errors listed.</p>";
+    return;
+  }
+  if (!shapFull) el.innerHTML = "<p>loading every feature's contribution…</p>";
+  let S; try { S = await loadShapFull(); } catch (e) { if (tok === whyToken) el.innerHTML = `<p class="warn">couldn't load: ${escHtml(e.message)}</p>`; return; }
+  if (tok !== whyToken) return;                      // the report changed while it loaded
+  const { c, v, F, T } = S, P = pred.labels, R = ref.labels, names = diag.meta.shap.features, notes = diag.meta.shap.notes;
+  const sgn = f => P[f] === 1 ? 1 : P[f] === 2 ? -1 : 0;      // + = towards the submission's label
+  const acc = () => ({ c: new Float64Array(F), v: new Float64Array(F), vn: new Float64Array(F), n: 0 });
+  const add = (a, f, sg) => {
+    const o = f * F; if (isNaN(T[c[o]])) return false;
+    for (let i = 0; i < F; i++) { a.c[i] += sg * T[c[o + i]]; const x = T[v[o + i]]; if (!isNaN(x)) { a.v[i] += x; a.vn[i]++; } }
+    a.n++; return true;
+  };
+  const err = acc(), ok = acc(), perBox = [];
+  for (const d of boxes) {
+    const b = acc();
+    for (let f = d.start; f < d.end; f++) { const sg = sgn(f); if (sg && R[f] !== P[f] && add(err, f, sg)) add(b, f, sg); }
+    perBox.push(b);
+  }
+  for (let f = 0; f < meta.n_frames; f++) { const sg = sgn(f); if (sg && R[f] === P[f]) add(ok, f, sg); }
+  if (!err.n || !ok.n) { el.innerHTML = "<p>No model frames in these errors.</p>"; return; }
+  const rows = names.map((name, i) => ({ i, name, e: err.c[i] / err.n, k: ok.c[i] / ok.n,
+                                       ev: err.v[i] / err.vn[i], kv: ok.v[i] / ok.vn[i] })).map(r => ({ ...r, diff: r.e - r.k }));
+  rows.sort((a, b) => b.diff - a.diff);
+  const num = x => isFinite(x) ? (Math.abs(x) >= 100 ? x.toFixed(0) : x.toFixed(2)) : "—";
+  const tr = r => `<tr data-i="${r.i}" title="${escHtml(`${r.name}: ${notes[r.name] || ""}\naverage value: ${num(r.ev)} on the errors, ${num(r.kv)} where they agree (not signed by team)\nclick: the error where it pushed the wrong way most`)}">` +
+                  `<td>${escHtml(r.name)}</td><td>${fmt(r.e)}</td><td>${fmt(r.k)}</td><td class="${r.diff > 0 ? "pos" : "neg"}">${fmt(r.diff)}</td></tr>`;
+  const table = (title, list) => `<table class="rep-table why-table"><thead><tr><th>${title}</th><th title="average on the error frames">errors</th>` +
+                                 `<th title="average where both tracks agree">agree</th><th>diff</th></tr></thead><tbody>${list.map(tr).join("")}</tbody></table>`;
+  // Where the log-odds crossed zero inside the errors: which feature pushed it over.
+  const lo = diag.lo, flips = new Map(); let crossings = 0, crossed = 0;
+  for (const d of boxes) {
+    let any = false;
+    for (let f = Math.max(1, d.start); f < d.end; f++) {
+      if (!(lo[f - 1] * lo[f] < 0)) continue;
+      const o = f * F, p = o - F; if (isNaN(T[c[o]]) || isNaN(T[c[p]])) continue;
+      const dir = lo[f] > 0 ? 1 : -1; let best = 0, bv = -Infinity;
+      for (let i = 0; i < F; i++) { const x = dir * (T[c[o + i]] - T[c[p + i]]); if (x > bv) { bv = x; best = i; } }
+      flips.set(best, (flips.get(best) || 0) + 1); crossings++; any = true;
+    }
+    if (any) crossed++;
+  }
+  const what = new Set(boxes.map(d => d.kind)), label = what.size === 1 ? KINDS[boxes[0].kind] : "Model errors";
+  const skipped = report.length - boxes.length;
+  el.innerHTML = `<p>${label} · ${boxes.length} errors · ${err.n.toLocaleString()} frames, against ${ok.n.toLocaleString()} where both tracks agree` +
+      (skipped ? ` (${skipped} dead-mask errors left out)` : "") + `. Each number is a feature's average push, + towards the submission's label, which is wrong on the error frames: a suspect backed it far more there than it does where the tracks agree.</p>` +
+      table("Suspects: backed the label more than usual", rows.slice(0, 8)) + table("Backed it less than usual", rows.slice(-3).reverse()) +
+      `<p>The model's log-odds crossed zero ${crossings} times inside ${crossed} of the ${boxes.length} errors` +
+      (crossings ? `; the feature that pushed it over each time:</p><div class="why-flips">${[...flips].sort((a, b) => b[1] - a[1]).slice(0, 8)
+         .map(([i, n]) => `<span title="${escHtml(notes[names[i]] || "")}">${escHtml(names[i])} ×${n}</span>`).join("")}</div>` : ".</p>") +
+      (crossed < boxes.length ? `<p>In the other ${boxes.length - crossed} the model's log-odds never crossed zero: it was on the submission's side throughout, or the video clue or Viterbi made the label.</p>` : "");
+  for (const row of el.querySelectorAll("tbody tr")) row.onclick = () => {
+    const i = +row.dataset.i; let best = -1, bv = -Infinity;
+    perBox.forEach((b, j) => { if (b.n && b.c[i] / b.n > bv) { bv = b.c[i] / b.n; best = j; } });
+    if (best >= 0) { const d = boxes[best]; video.pause(); seek(d.start); markReport(d.k, true); }
+  };
+}
+function markReport(k, scroll = false) {
+  const list = $("repList");
+  list.querySelector(".rep-item.on")?.classList.remove("on");
+  const box = list.querySelector(`.rep-item[data-k="${k}"]`); if (box) box.classList.add("on");
+  if (box && scroll) list.scrollTo({ top: box.offsetTop - (list.clientHeight - box.offsetHeight) / 2, behavior: "smooth" });  // the list only, not the page
+  repOn = k;
+}
+// The discrepancy containing frame f in a time-ordered list, or null.
+function discrepancyAt(list, f) {
+  let lo = 0, hi = list.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (list[m].start <= f) lo = m + 1; else hi = m; }
+  const d = list[lo - 1]; return d && f < d.end ? d : null;
+}
+function reportCsv() {
+  if (!report.length) { msg("Nothing to export: the report is empty"); return; }
+  const pred = $("repPred").value, ref = $("repRef").value, p = diag?.meta.p_switch;
+  const cols = ["type", "start_frame", "end_frame", "duration_frames", "duration_s", "match_clock", "submission_label", "reference_label",
+                "spellF1_gain_if_fixed", "spellF1_cost_rank",
+                "log_odds_mean", "log_odds_min", "log_odds_max", "log_odds_sum", "p_home_mean",
+                "video_clue_weighted_sum", "video_clue_weighted_mean", "video_clue_frames", "score_sum",
+                "dead_mask_frames", "viterbi_switches_in_gap", "switch_cost", "viterbi_kept_frames", "viterbi_switched_frames", "viterbi_decision", "note", "teammate_notes"];
+  const r4 = x => x === undefined || !isFinite(x) ? "" : +x.toFixed(4);
+  const rows = report.map(d => {
+    const n = d.end - d.start;
+    return [KINDS[d.kind], d.start, d.end - 1, n, +(n / meta.fps).toFixed(2), clock(d.start), d.pred, d.ref,
+            d.gain === undefined ? "" : +d.gain.toFixed(6), d.rank, r4(d.loMean), r4(d.loMin), r4(d.loMax), r4(d.loSum), r4(d.loMean === undefined ? undefined : 1 / (1 + Math.exp(-d.loMean))),
+            r4(d.vSum), r4(d.vMean), d.vN ?? "", r4(d.score), d.deadN ?? "", d.sw ?? "", r4(d.swCost), d.kept ?? "", d.switched ?? "", d.decision ?? "",
+            notes.get(noteKey(pred, ref, d.start, d.end - 1)) || "",
+            (sharedNotes.get(noteKey(pred, ref, d.start, d.end - 1)) || []).map(s => `${s.from}: ${s.note}`).join(" | ")];
+  });
+  const esc = v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+  const head = [`# submission=${pred}`, `# reference=${ref}`, `# type=${[...selectedTypes()].join("+") || "all"}`,
+                scores ? `# spellF1=${scores.spell.toFixed(6)} macroF1=${scores.macro.toFixed(6)} (spellF1_gain_if_fixed: each discrepancy fixed alone)` : "# scores: none", `# minor_misaligned_hidden_under_frames=${$("repMinor").value}`,
+                diag ? `# pipeline: model=${diag.meta.model} w_video=${diag.meta.w_video} p_switch=${p} built=${diag.meta.built}` : "# pipeline numbers: not built"];
+  const text = head.join("\n") + "\n" + [cols, ...rows].map(r => r.map(esc).join(",")).join("\n") + "\n";
+  const a = document.createElement("a"), base = s => s.replace(/\.csv$/, "").replace(/[^\w.-]+/g, "_");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+  a.download = `report_${base(pred)}_vs_${base(ref)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+// The band: the pipeline's numbers at the playhead, and how the two report tracks compare there.
+// Built once and updated in place each frame, so the dead-mask hover and the Viterbi flash survive playback.
+let tipFor = null, lastVitState = null;              // which band hover is open: "dead", "lo" or none
+let tipTimer = null;                                 // closes the hover shortly after the mouse leaves it
+// Smart Tagging's SET PIECES and GOALS tags (/tags): type, team, frames and restart kick.
+let stopTags = [];
+async function loadTags() {
+  try { stopTags = (await (await fetch("/tags")).json()).tags; } catch (e) { msg(`couldn't read the set-piece tags: ${e.message}`); }
+}
+const tagsAt = f => stopTags.filter(t => t.start <= f && f <= t.end);      // they can overlap (a GOALS tag over a throw-in)
+const tagName = t => `${t.type}${t.team_name && t.team_name !== "N/A" ? " · " + t.team_name : ""}`;
+function initBand() {
+  const band = $("band"); band.dataset.diag = String(!!diag);
+  band.innerHTML = `<span><b>frame</b> <span id="bFrame"></span></span>` + (diag ? `
+    <span class="hov" id="bLoWrap"><b>log-odds</b> <span class="num" id="bLo"></span> <b>(P home <span id="bP"></span>)</b> ⓘ</span>
+    <span><b>video ×${diag.meta.w_video}</b> <span class="num" id="bVid"></span></span>
+    <span><b>score</b> <span class="num" id="bScore"></span></span>
+    <span class="hov" id="bDeadWrap" title=""><b>dead mask</b> <span id="bDead"></span> ⓘ</span>
+    <span><b>evidence</b> <span id="bEvid"></span></span>
+    <span><b>Viterbi</b> <span class="vbox" id="bVit"></span></span>`
+    : `<span class="bad">no pipeline numbers: python -m pipeline.viewer --diagnostics</span>`) + `
+    <span title="The Smart Tagging set-piece tag the playhead is in"><b>tag</b> <span class="tagf" id="bTag"></span></span>
+    <span id="bCmp"></span>
+    <span class="scores" id="bScores" title="Whole match, submission vs reference, as on the scoreboard"></span>
+    <button class="bjump" id="bJump" title="Show the discrepancy under the playhead in the report"></button>`;
+  $("bJump").onclick = e => {
+    const d = discrepancyAt(repByTime, frame); e.currentTarget.blur();    // hand Space back to play/pause
+    if (d) markReport(d.k, true);
+  };
+  // The hover stays open while the mouse is on its label or on the hover itself (to scroll or read
+  // it); it closes a moment after the mouse leaves both, so crossing the gap between them is fine.
+  const tip = $("deadTip");
+  const closeSoon = () => { clearTimeout(tipTimer); tipTimer = setTimeout(() => { tipFor = null; tip.style.display = "none"; }, 300); };
+  for (const [id, which] of [["bDeadWrap", "dead"], ["bLoWrap", "lo"]]) {
+    const wrap = $(id); if (!wrap) continue;
+    wrap.onmouseenter = () => {
+      clearTimeout(tipTimer);
+      if (tipFor !== which) tip.scrollTop = 0;
+      tipFor = which; drawBand();
+    };
+    wrap.onmouseleave = closeSoon;
+  }
+  tip.onmouseenter = () => clearTimeout(tipTimer);
+  tip.onmouseleave = closeSoon;
+}
+// What went into the dead mask at frame f: Task 4's weighted votes against its threshold, its clean-up,
+// then dead_refine and the pre-kickoff.
+const escHtml = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function deadTipHtml(f) {
+  const m = diag.meta, st = x => x ? '<span class="D">dead</span>' : "live";
+  if (!diag.votes) return `Only the final mask is cached.\nRebuild: python -m pipeline.viewer --diagnostics`;
+  let score = 0, rows = "";
+  for (const [name, w] of Object.entries(m.dead_weights)) {
+    const v = diag.votes[name][f], c = w * v; score += c;
+    rows += `\n  ${name.padEnd(16)} ${w.toFixed(1)} × ${(v > 0 ? "+" : "") + v} = ${(c > 0 ? "+" : c < 0 ? "−" : " ") + Math.abs(c).toFixed(2)}` +
+            `  <b>${v < 0 ? "dead" : v > 0 ? "live" : "—"}</b>`;
+  }
+  const raw = score < m.dead_threshold, t4 = diag.task4[f] > 0, fin = diag.dead[f] > 0;
+  const [pk0, pk1] = m.prekickoff || [-1, -2];
+  let out = `<b>Dead mask at frame ${f.toLocaleString()}</b>\n<b>1. Task 4 votes (weight × vote, −1 dead / +1 live)</b>${rows}` +
+    `\n  ${"score".padEnd(16)} ${fmt(score)}  vs threshold ${m.dead_threshold}  →  ${st(raw)}` +
+    `\n<b>2. Clean-up</b> (live gaps ≤ ${m.max_live_gap_s} s joined, dead ≤ ${m.min_dead_s} s dropped)  →  ${st(t4)}` +
+    (t4 !== raw ? `  <span class="bad">${t4 ? "joined into a stoppage" : "dropped as a flicker"}</span>` : "") +
+    `\n<b>3. dead_refine, mask after each step</b>`;
+  if (!diag.steps) return out + `  →  ${st(fin)}\n  (rebuild for the steps: python -m pipeline.viewer --diagnostics)`;
+  let prev = t4;
+  m.refine_steps.forEach((name, i) => {
+    const now = ((diag.steps[f] >> i) & 1) === 1, changed = now !== prev;
+    out += `\n  ${name.padEnd(20)} ${now ? '<span class="D">dead</span>' : "live"}` +
+           (changed ? `  <span class="bad">◀ ${now ? "made dead" : "made live"}</span>` : "");   // one line per step, always
+    prev = now;
+  });
+  // What the steps look at, here.
+  const r = m.refine_numbers, sp = diag.speed[f], ov = diag.over[f], s1 = x => (x >= 0 ? "+" : "") + x.toFixed(1);
+  const ev = m.events, fps = meta.fps, win = 60 * fps;
+  const nearest = (list, key = x => x) => {
+    let best = null; for (const x of list) { const d = key(x) - f; if (Math.abs(d) <= win && (best === null || Math.abs(d) < Math.abs(best.d))) best = { x, d }; }
+    return best;
+  };
+  const when = b => (!b ? "none within 60 s" : `${b.d === 0 ? "this frame" : `${Math.abs(b.d)} frames (${(Math.abs(b.d) / fps).toFixed(1)} s) ${b.d > 0 ? "ahead" : "ago"}`}`).padEnd(28);   // fixed width: the hints after it don't move
+  const tag = nearest(ev.set_piece_tags, x => x[0]), cut = nearest(ev.cutaways), wh = nearest(ev.whistles);
+  out += `\n<b>Numbers at this frame</b>` +
+    `\n  ball speed        ${(isNaN(sp) ? "no ball" : sp.toFixed(2) + " m/s").padEnd(11)}   <b>still ≤ ${r.still_ms}, in play ≥ ${r.moving_ms}, kick ≥ ${r.kick_ms}</b>` +
+    `\n  over a line       ${(isNaN(ov) ? "no ball" : ov > 0 ? `${ov.toFixed(2)} m out` : `${(-ov).toFixed(1)} m inside`).padEnd(13)}   <b>out > ${r.out_margin_m} m (edges snap at > 0)</b>` +
+    `\n  restart kick      ${diag.kick[f] ? '<span class="bad">yes</span>' : "no"}` +
+    `\n  carried           ${diag.carried[f] ? '<span class="bad">yes</span>' : "no "}   <b>player &lt; ${r.carry_near_m} m, ball ${r.carry_ms[0]}–${r.carry_ms[1]} m/s</b>` +
+    `\n  video ball play   ${diag.vmove[f] ? '<span class="bad">yes</span>' : "no"}` +
+    `\n  set-piece tag     ${when(tag)}${tag ? `   <b>${escHtml(tagName(stopTags.find(t => t.start === tag.x[0]) || { type: "tag" }))} ${tag.x[0]}–${tag.x[1]}</b>` : ""}` +
+    `\n  TV cut-away       ${when(cut)}` +
+    `\n  whistle onset     ${when(wh)}   <b>times a start within ${r.whistle_near_s} s; start = onset + ${r.whistle_lag} frames</b>`;
+  // start_at_duel_stops' signal: the nearest duel stop (a home and an away player running together slow to
+  // a walk), everyone's mean speed and slowdown here, and how much of the next 2 s the tracking sees the
+  // ball. Always two lines, so the hover keeps its height.
+  if (diag.duel) {
+    let duel = null;
+    for (let d = 0; d <= win; d++) {
+      if (f + d < diag.duel.length && diag.duel[f + d]) { duel = { d }; break; }
+      if (f - d >= 0 && diag.duel[f - d]) { duel = { d: -d }; break; }
+    }
+    let seen = 0, n2 = 0;
+    for (let g = f; g < Math.min(f + 2 * fps, diag.speed.length); g++, n2++) if (!isNaN(diag.speed[g])) seen++;
+    const ps = diag.pspeed[f], dr = diag.pslow[f], hit = (c, x) => c ? `<span class="bad">${x}</span>` : x;
+    const slowTxt = isNaN(dr) ? "—" : (dr >= 0 ? "+" : "−") + Math.abs(dr).toFixed(2) + " m/s";
+    out += `\n  duel stop         ${when(duel)}   <b>home + away ≤ ${r.duel_m} m, pair ≥ ${r.duel_fast_ms} → ≤ ${r.duel_slow_ms} m/s; moves a start ≤ ${r.duel_search_s} s in</b>` +
+      `\n  players slowing   ${(isNaN(ps) ? "—" : ps.toFixed(2) + " m/s").padEnd(9)} slowdown ${hit(dr >= r.duel_drop_ms, slowTxt.padEnd(10))} ball seen next 2 s ${hit(n2 && seen / n2 <= r.duel_ball_lost, (n2 ? Math.round(100 * seen / n2) : 0) + "%")}` +
+      `   <b>needs slowdown ≥ ${r.duel_drop_ms}, ran ≥ ${r.duel_play_ms} m/s before, ball seen ≤ ${Math.round(100 * r.duel_ball_lost)}%</b>`;
+  } else out += `\n  duel stop         not cached: python -m pipeline.viewer --diagnostics-only\n `;
+  out += `\n` + (f >= pk0 && f <= pk1 ? `<span class="bad">second-half pre-kickoff: always dead</span>` : " ");   // reserved line
+  return out;
+}
+// What made the model's log-odds at frame f: XGBoost's exact split of it into one contribution per
+// feature (TreeSHAP), the base value plus every contribution = the log-odds. The biggest few are cached.
+// The model hover, plus what merge_ballless_spells looks at: white pixels in the ball square here, and
+// over the possession under the playhead the share of frames with fewer than it allows.
+function loTipHtml(f) {
+  let out = loTipCore(f);
+  const nb = diag.meta.no_ball;
+  if (!diag.white || !nb) return out + `\n<b>Ball square</b>  not cached: python -m pipeline.viewer --diagnostics-only\n `;
+  const w = diag.white[f];
+  // The possession under the playhead: the one this rule removed, if it removed one here, else the
+  // run of the same label.
+  const merged = diag.merged && diag.merged[f], same = g => merged ? diag.merged[g] : diag.vit[g] === diag.vit[f];
+  let s = f, e = f + 1;
+  if (merged || diag.vit[f] === 1 || diag.vit[f] === 2) {
+    while (s > 0 && same(s - 1)) s--;
+    while (e < diag.vit.length && same(e)) e++;
+  }
+  let n = 0, low = 0;
+  for (let g = s; g < e; g++) if (diag.white[g] >= 0) { n++; if (diag.white[g] < nb.white_px) low++; }
+  const share = n ? low / n : NaN;
+  out += `\n<b>Ball square</b> (the box drawn around the tracked ball)` +
+    `\n  white pixels here  ${(w < 0 ? "no square" : String(w)).padEnd(9)} <b>a ball shows ≥ ${nb.white_px}</b>` +
+    `\n  ${merged ? "removed possession" : "this possession  "} ${!n ? "—" : `${Math.round(100 * share)}% of ${n} frames without`.padEnd(26)}` +
+    (merged ? ` <span class="bad">◀ merged into the team before (${((e - s) / meta.fps).toFixed(1)} s)</span>` :
+     n && share > nb.share ? ' <span class="bad">no ball under the tracking</span>' : "") +
+    `   <b>> ${Math.round(100 * nb.share)}% and ≤ ${nb.max_s} s: merged into the team before</b>`;
+  return out;
+}
+function loTipCore(f) {
+  const m = diag.meta.shap, r = diag.shap;
+  if (!r) return `Feature contributions aren't cached.\nRebuild: python -m pipeline.viewer --diagnostics`;
+  const k = m.k, W = m.width || 2 + 3 * k, o = f * W, ch = W > 2 + 3 * k ? o + 2 + 3 * k : -1;
+  if (isNaN(r[o])) return `<b>Model log-odds at frame ${f.toLocaleString()}</b>\n  not graded: the model doesn't run here`;
+  const val = v => isNaN(v) ? "missing" : Number.isInteger(v) ? String(v) : v.toFixed(2);
+  const bar = c => `<span class="${c >= 0 ? "H" : "A"}">${"█".repeat(Math.min(12, Math.max(1, Math.round(Math.abs(c) * 4))))}</span>`;
+  // The feature whose contribution changed most since the previous frame gets a yellow arrow.
+  const chI = ch >= 0 && !isNaN(r[ch]) ? r[ch] : -1, chD = chI >= 0 ? r[ch + 1] : 0;
+  const arrow = `  <span class="chg">◀ biggest change ${fmt(chD)}</span>`;
+  const row = (name, v, c, mark) => `\n  ${name.padEnd(26)} ${val(v).padStart(8)}  ${fmt(c).padStart(6)} ${bar(c)}${mark ? arrow : ""}` +
+                                    `\n      <i>${escHtml(m.notes[name] || "")}</i>`;
+  let sum = r[o] + r[o + 1], rows = "", rest = r[o + 1], others = m.features.length - k, inTop = false;
+  for (let j = 0; j < k; j++) {
+    const i = r[o + 2 + j], c = r[o + 2 + k + j]; sum += c;
+    if (i === chI) inTop = true;
+    rows += row(m.features[i], r[o + 2 + 2 * k + j], c, i === chI);
+  }
+  if (chI >= 0 && !inTop) {                         // outside the top k: its own row, taken out of "the rest"
+    rows += `\n<b>Biggest change since the previous frame</b>` + row(m.features[chI], r[ch + 3], r[ch + 2], true);
+    rest -= r[ch + 2]; others -= 1;
+  }
+  const lo = diag.lo[f], p = 1 / (1 + Math.exp(-lo));
+  return `<b>Model log-odds at frame ${f.toLocaleString()} (XGBoost; + pushes to home, − to away)</b>` +
+    `\n  ${"base (where every frame starts)".padEnd(35)}  ${fmt(r[o]).padStart(6)}` +
+    `\n<b>Biggest pushes here: feature, its value, contribution</b>${rows}` +
+    `\n  ${`the other ${others} features together`.padEnd(35)}  ${fmt(rest).padStart(6)}` +
+    `\n  ${"= log-odds".padEnd(35)}  ${fmt(sum).padStart(6)}  →  P(home) ${p.toFixed(3)}` +
+    (Math.abs(sum - lo) > 0.01 ? `\n  <span class="bad">used as ${fmt(lo)} (clipped)</span>` : "");
+}
+function drawBand() {
+  const band = $("band"); band.style.display = $("showBand").checked ? "flex" : "none";
+  if (!$("showBand").checked) return;
+  if (band.dataset.diag !== String(!!diag)) initBand();     // first draw, or the numbers arrived since
+  const pred = tracks.find(t => t.id === $("repPred").value), ref = tracks.find(t => t.id === $("repRef").value);
+  const lab = c => `<span class="${LETTERS[c]}">${LETTERS[c]}</span>`;
+  $("bFrame").textContent = frame.toLocaleString();
+  const tgs = tagsAt(frame), bt = $("bTag");
+  if (bt) {
+    const secs = d => (Math.abs(d) / meta.fps).toFixed(1) + " s";
+    const kickText = t => t.kick === null ? "no kick seen" : frame < t.kick ? `kick in ${secs(t.kick - frame)}` : `kicked ${secs(frame - t.kick)} ago`;
+    bt.textContent = !tgs.length ? "—" : tgs.map(t => `${tagName(t)} · ${kickText(t)}`).join("  +  ");
+    bt.title = tgs.map(t => `${t.code} ${tagName(t)}: frames ${t.start.toLocaleString()}–${t.end.toLocaleString()} (${clock(t.start)}–${clock(t.end)})` +
+      (t.kick === null ? "; no restart kick inside it, so it votes dead to its end" : `; restart kick at ${t.kick.toLocaleString()}, where its dead vote stops`)).join("\n");
+  }
+  if (diag) {
+    const lo = diag.lo[frame], v = diag.vid[frame], dead = diag.dead[frame] > 0, vit = diag.vit[frame];
+    const raw = dead ? 3 : lo + v >= 0 ? 1 : 2, graded = vit !== 0;
+    $("bLo").textContent = fmt(lo); $("bP").textContent = (1 / (1 + Math.exp(-lo))).toFixed(2);
+    $("bVid").textContent = fmt(v); $("bScore").textContent = fmt(lo + v);
+    $("bDead").innerHTML = dead ? '<span class="D">dead</span>' : "play";
+    $("bEvid").innerHTML = graded ? lab(raw) : "—";
+    // Viterbi box: lit while it overrules the frame's own evidence, and flashes each time that flips.
+    const box = $("bVit"), state = !graded ? "none" : vit === raw ? "keep" : "switch";
+    box.innerHTML = graded ? `${lab(vit)} · ${state}` : "not graded";
+    box.classList.toggle("sw", state === "switch");
+    if (lastVitState !== null && state !== lastVitState && state !== "none" && lastVitState !== "none") {
+      box.classList.remove("flash"); void box.offsetWidth; box.classList.add("flash");
+    }
+    lastVitState = state;
+    if (tipFor) {
+      const tip = $("deadTip"), wrap = $(tipFor === "dead" ? "bDeadWrap" : "bLoWrap");
+      const scroll = tip.scrollTop;                  // keep the reader's place as frames change
+      tip.innerHTML = tipFor === "dead" ? deadTipHtml(frame) : loTipHtml(frame); tip.style.display = "block";
+      tip.style.bottom = band.offsetHeight + 6 + "px";
+      // Never taller than the screen above the band: what doesn't fit scrolls inside the hover.
+      tip.style.maxHeight = Math.max(120, band.getBoundingClientRect().top - 14) + "px";
+      tip.style.left = Math.max(6, Math.min(wrap.offsetLeft, band.clientWidth - tip.offsetWidth - 6)) + "px";
+      tip.scrollTop = scroll;
+    }
+  }
+  if (pred && ref && pred !== ref) {
+    const p = pred.labels[frame], r = ref.labels[frame];
+    $("bCmp").innerHTML = `<b>sub/ref</b> ${lab(p)}/${lab(r)} ${!p || !r ? "" : p === r ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>'}`;
+  } else $("bCmp").innerHTML = "";
+  const here = discrepancyAt(repByTime, frame), jump = $("bJump");
+  jump.disabled = !here;
+  jump.textContent = here ? `↗ #${here.rank} ${KINDS[here.kind].toLowerCase()}`
+                   : discrepancyAt(repOtherByTime, frame) ? "other type (filtered)"
+                   : discrepancyAt(repHiddenByTime, frame) ? "hidden (Minor)" : "no error here";
+  jump.classList.toggle("live", !!here);
+  $("bScores").innerHTML = scores ? `<b>spellF1</b> ${scores.spell.toFixed(3)} <b>macroF1</b> ${scores.macro.toFixed(3)}` : "";
+}
+
+// --------------------------------------------------------------------------------- overlay ----
+function clock(f) {
+  const h = meta.halves.findIndex(([a, b]) => f >= a && f <= b);
+  if (h < 0) return "not in play";
+  const kickoff = (meta.kickoffs || meta.halves.map(([a]) => a))[h];   // the clock starts at the kickoff, not the half's first frame
+  if (f < kickoff) return `${h + 1}${h ? "nd" : "st"} half, before kickoff`;
+  const s = (f - kickoff) / meta.fps + (h === 1 ? 45 * 60 : 0);
+  return `${h + 1}${h ? "nd" : "st"} half ${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+}
+function draw() {
+  if (!meta) return;
+  const W = overlay.width, H = overlay.height, k = W / SRC_W, dpr = window.devicePixelRatio || 1;
+  ctx.clearRect(0, 0, W, H);
+  drawBand();
+  const bandH = $("showBand").checked ? $("band").offsetHeight * dpr : 0;   // keep the badges above it
+  // ball boxes
+  if (ball) {
+    const box = (x, y, color, tag) => {
+      if (x === MISSING) return;
+      const s = 34 * k, cx = x * k, cy = y * k;
+      ctx.strokeStyle = color; ctx.lineWidth = 2 * dpr; ctx.strokeRect(cx - s / 2, cy - s / 2, s, s);
+      ctx.font = `${11 * dpr}px sans-serif`; ctx.fillStyle = color; ctx.fillText(tag, cx - s / 2, cy - s / 2 - 4 * dpr);
+    };
+    const o = frame * 4;
+    if ($("showTrk").checked) box(ball[o], ball[o + 1], COLORS_BALL.trk, "tracking");
+    if ($("showVid").checked) box(ball[o + 2], ball[o + 3], COLORS_BALL.vid, "video");
+  }
+  // label badges, one per shown track, stacked in the bottom-left (the video's scoreboard is top-left)
+  ctx.font = `600 ${15 * dpr}px -apple-system, sans-serif`; ctx.textBaseline = "middle";
+  const shown = tracks.filter(t => t.show);
+  let y = H - bandH - 12 * dpr - shown.length * 32 * dpr + 6 * dpr;
+  for (const t of shown) {
+    const c = LETTERS[t.labels[frame]], text = c === "X" ? "X · not graded" : c === "D" ? "D · dead ball" : `${c} · ${meta.teams[c]}`;
+    const name = t.name.replace(/\.csv$/, ""), pad = 8 * dpr, hgt = 26 * dpr;
+    ctx.font = `${12 * dpr}px -apple-system, sans-serif`; const nw = ctx.measureText(name).width;
+    ctx.font = `600 ${15 * dpr}px -apple-system, sans-serif`; const tw = ctx.measureText(text).width;
+    ctx.fillStyle = "rgba(0,0,0,.65)"; ctx.fillRect(12 * dpr, y, nw + tw + pad * 4 + 10 * dpr, hgt);
+    ctx.fillStyle = COLORS[c]; ctx.fillRect(12 * dpr, y, 6 * dpr, hgt);
+    ctx.font = `${12 * dpr}px -apple-system, sans-serif`; ctx.fillStyle = "#cbd5e1"; ctx.fillText(name, 12 * dpr + pad * 2, y + hgt / 2);
+    ctx.font = `600 ${15 * dpr}px -apple-system, sans-serif`; ctx.fillStyle = c === "X" ? "#94a3b8" : COLORS[c];
+    ctx.fillText(text, 12 * dpr + pad * 3 + nw + 10 * dpr, y + hgt / 2);
+    y += hgt + 6 * dpr;
+  }
+  $("readout").textContent = `frame ${frame.toLocaleString()} · ${clock(frame)}`;
+  drawDetail(); drawPlayheads();
+}
+const COLORS_BALL = { trk: getComputedStyle(document.documentElement).getPropertyValue("--trk").trim(),
+                      vid: getComputedStyle(document.documentElement).getPropertyValue("--vid").trim() };
+
+// ------------------------------------------------------------------------- time and frames ----
+function setFrame(f) { f = Math.max(0, Math.min(meta.n_frames - 1, f)); if (f !== frame) { frame = f; draw(); } }
+function seek(f) {
+  f = Math.max(0, Math.min(meta.n_frames - 1, f));
+  frame = f; probe = null; video.currentTime = (f + 0.5) / meta.fps; draw(); saveSoon();
+}
+let saveTimer = 0; function saveSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(save, 800); }
+
+// Speed: set both rates so a reload or a new source keeps it, and re-apply on load and play in
+// case the browser reset it. The readout also shows the speed actually reached, measured over
+// each second of playback: 1080p at 4x is 100 decoded frames a second, which not every machine keeps up with.
+function setSpeed(r) {
+  speed = Math.max(0.25, Math.min(4, Math.round((+r || 1) * 4) / 4));
+  video.defaultPlaybackRate = speed; video.playbackRate = speed;
+  $("speed").value = speed; showSpeed(null); probe = null; saveSoon();
+}
+function showSpeed(actual) {
+  const out = $("speedVal"), slow = actual !== null && actual < speed * 0.85;
+  out.textContent = slow ? `${speed}× (≈${actual.toFixed(1)}×)` : `${speed}×`;
+  out.className = slow ? "slow" : "";
+  out.title = slow ? "The browser can't decode the video this fast: it is playing slower than asked." : "";
+}
+function measureSpeed(now, mediaTime) {
+  if (video.paused || video.seeking) { probe = null; return; }
+  if (!probe) { probe = { now, t: mediaTime }; return; }
+  if (now - probe.now < 1000) return;
+  const actual = (mediaTime - probe.t) / ((now - probe.now) / 1000);
+  if (actual >= 0 && actual < 20) showSpeed(actual);
+  probe = { now, t: mediaTime };
+}
+// Sound: off by default. Browsers only allow sound after a click or key press, which turning it on is.
+// The tactical video's audio is recorded very quietly (about -60 dBFS RMS, peaks near -45), so it is
+// amplified by AUDIO_BOOST through Web Audio, with a compressor in front of the output so loud moments don't clip.
+const AUDIO_BOOST = 60;                     // +36 dB
+let audio = null;
+function boostAudio() {
+  if (audio === false) { video.volume = volume; return; }  // no Web Audio here: plain, unboosted sound
+  if (!audio) {
+    try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const gain = ac.createGain(), limit = ac.createDynamicsCompressor();
+    limit.threshold.value = -6; limit.ratio.value = 20;
+    ac.createMediaElementSource(video).connect(gain).connect(limit).connect(ac.destination);
+    audio = { ac, gain };
+    } catch (e) { audio = false; video.volume = volume; msg(`Sound can't be boosted in this browser (${e.message}): it will be very quiet.`); return; }
+  }
+  const g = audio.gain.gain; g.cancelScheduledValues(0); g.value = AUDIO_BOOST * volume;
+  if (audio.ac.state === "suspended" && !video.paused) audio.ac.resume();
+}
+// On pause the media element keeps feeding Web Audio its last buffer for a moment, so the same
+// slice of sound repeats a few times. Cut the gain to zero and suspend the graph so it stops at once.
+function silenceAudio() {
+  if (!audio) return;
+  const g = audio.gain.gain; g.cancelScheduledValues(0); g.setValueAtTime(0, audio.ac.currentTime);
+  if (audio.ac.state === "running") audio.ac.suspend();
+}
+function setSound(on, vol = volume) {
+  sound = !!on; volume = Math.max(0, Math.min(1, +vol)); video.muted = !sound;
+  if (sound) boostAudio();
+  $("sound").checked = sound; $("volume").value = volume; saveSoon();
+}
+for (const ev of ["loadedmetadata", "play"]) video.addEventListener(ev, () => { if (video.playbackRate !== speed) video.playbackRate = speed; });
+
+if ("requestVideoFrameCallback" in HTMLVideoElement.prototype) {
+  const onFrame = (now, md) => { setFrame(Math.round(md.mediaTime * meta.fps)); measureSpeed(now, md.mediaTime); video.requestVideoFrameCallback(onFrame); };
+  video.addEventListener("loadedmetadata", () => video.requestVideoFrameCallback(onFrame), { once: true });
+} else {                                   // older browsers: follow currentTime every animation frame
+  const tick = () => { if (meta) setFrame(Math.floor(video.currentTime * meta.fps)); requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+}
+video.addEventListener("play", () => { $("play").textContent = "❚❚ Pause"; if (sound) boostAudio(); });
+video.addEventListener("pause", () => { silenceAudio(); $("play").textContent = "▶︎ Play"; saveSoon(); });
+video.addEventListener("error", () => msg("The video didn't load: is the server running and the match data in data/?"));
+function togglePlay() { video.paused ? video.play() : (silenceAudio(), video.pause()); }
+function step(d) { video.pause(); seek(frame + d); }
+function jumpChange(dir) {
+  const t = tracks.find(x => x.id === jumpId); if (!t) return;
+  const ch = t.changes; let lo = 0, hi = ch.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (ch[m] <= frame) lo = m + 1; else hi = m; }
+  const target = dir > 0 ? ch[lo] : ch[(ch[lo - 1] === frame ? lo - 2 : lo - 1)];
+  if (target !== undefined) { video.pause(); seek(target); }
+}
+// Differences: frames where the shown tracks give at least two different graded labels. X (not
+// graded) is ignored, so a track that only covers part of the match doesn't disagree everywhere else.
+function jumpDiff(dir) {
+  const ls = tracks.filter(t => t.show).map(t => t.labels), n = meta.n_frames;
+  if (ls.length < 2) { msg("Show at least two tracks to compare them"); return; }
+  const diff = i => { let a = 0; for (const l of ls) { const c = l[i]; if (!c) continue; if (a && c !== a) return true; a = c; } return false; };
+  let i = frame;
+  if (dir > 0) {
+    while (i < n && diff(i)) i++;                    // leave the block we're in
+    while (i < n && !diff(i)) i++;
+  } else {
+    i--; while (i >= 0 && !diff(i)) i--;
+    while (i > 0 && diff(i - 1)) i--;                // back to the start of that block
+  }
+  if (i < 0 || i >= n) { msg(dir > 0 ? "No more differences after this frame" : "No differences before this frame"); return; }
+  let end = i; while (end < n && diff(end)) end++;
+  video.pause(); seek(i);
+  msg(`Difference: ${(end - i).toLocaleString()} frame${end - i === 1 ? "" : "s"} (${i.toLocaleString()}–${(end - 1).toLocaleString()})`);
+}
+$("play").onclick = togglePlay;
+$("prevD").onclick = () => jumpDiff(-1); $("nextD").onclick = () => jumpDiff(1);
+$("back").onclick = () => step(-meta.fps); $("fwd").onclick = () => step(meta.fps);
+$("prevF").onclick = () => step(-1); $("nextF").onclick = () => step(1);
+$("prevC").onclick = () => jumpChange(-1); $("nextC").onclick = () => jumpChange(1);
+$("speed").oninput = e => setSpeed(e.target.value);
+$("speed").onchange = e => e.target.blur();          // hand the arrow keys back to frame stepping
+$("speed").ondblclick = () => setSpeed(1);
+$("goto").onchange = e => { if (e.target.value !== "") { video.pause(); seek(+e.target.value); } };
+$("publicWin").onclick = () => { const f = gtLabels ? gtLabels.findIndex(c => c) : 0; video.pause(); seek(Math.max(0, f)); };
+$("showTrk").onchange = draw; $("showVid").onchange = draw;
+$("showBand").onchange = e => { draw(); save(); e.target.blur(); };
+$("repPred").onchange = e => { repWant.repPred = ""; reportSoon(); draw(); save(); e.target.blur(); };
+$("repRef").onchange = e => { repRefChosen = true; repWant.repRef = ""; reportSoon(); draw(); save(); e.target.blur(); };
+$("repMinor").onchange = e => { reportSoon(); save(); e.target.blur(); };
+$("repSort").onchange = e => { reportSoon(); save(); e.target.blur(); };
+$("repTypes").onchange = e => { reportSoon(); save(); e.target.blur(); };
+addEventListener("click", e => { if (!$("repTypesBox").contains(e.target)) $("repTypesBox").open = false; });   // a click elsewhere closes it
+$("repWhy").ontoggle = () => { save(); renderWhy(); };
+// The type checklist: one box per kind; none ticked lists every type.
+function selectedTypes() { return new Set([...document.querySelectorAll("#repTypes input:checked")].map(b => b.value)); }
+function setTypes(list) { for (const b of $("repTypes").querySelectorAll("input")) b.checked = list.includes(b.value); }
+for (const [k, name] of Object.entries(KINDS)) {
+  const l = document.createElement("label"), b = document.createElement("input");
+  b.type = "checkbox"; b.value = k; l.append(b, Object.assign(document.createElement("span"), { className: `kdot ${k}` }), name);
+  $("repTypes").append(l);
+}
+{ const all = Object.assign(document.createElement("button"), { textContent: "all", title: "Untick every type: list them all" });
+  all.onclick = e => { e.preventDefault(); setTypes([]); reportSoon(); save(); }; $("repTypes").append(all); }
+$("repCsv").onclick = reportCsv;
+$("plot").onclick = ev => {                          // click to jump, like the detail lanes above it
+  const r = $("plot").getBoundingClientRect(), u = (ev.clientX - r.left) / r.width;
+  seek(frame + Math.round((u - 0.5) * 2 * DETAIL_FRAMES));
+};
+$("sound").onchange = e => { setSound(e.target.checked); e.target.blur(); };
+$("volume").oninput = e => setSound(true, e.target.value);   // moving the volume turns sound on
+$("volume").onchange = e => e.target.blur();          // hand the arrow keys back to frame stepping
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" && e.target.type === "number") return;
+  const k = e.key;
+  if (k === " ") { e.preventDefault(); togglePlay(); }
+  else if (k === "ArrowLeft") { e.preventDefault(); step(e.shiftKey ? -meta.fps : -1); }
+  else if (k === "ArrowRight") { e.preventDefault(); step(e.shiftKey ? meta.fps : 1); }
+  else if (k === "[") jumpChange(-1);
+  else if (k === "]") jumpChange(1);
+  else if (k === ",") jumpDiff(-1);
+  else if (k === ".") jumpDiff(1);
+  else if (k === "m") setSound(!sound);
+  else if (k === "-" || k === "_") setSpeed(speed - 0.25);
+  else if (k === "=" || k === "+") setSpeed(speed + 0.25);
+});
+window.addEventListener("resize", () => { sizeCanvases(); drawOverview(); draw(); });
+
+// ------------------------------------------------------------------------------ add files ----
+$("fileBtn").onclick = () => $("file").click();
+$("file").onchange = async e => { for (const f of e.target.files) await addCsvText(f.name, await f.text()); e.target.value = ""; };
+$("resultPick").onchange = async e => {
+  const name = e.target.value; e.target.value = ""; if (!name) return;
+  const r = await fetch("/results/" + encodeURIComponent(name)); if (r.ok) addCsvText(name, await r.text()); else msg(`couldn't read ${name}`);
+};
+// Fetch the newest copy of every loaded track that lives in evaluation/results/, and our submission
+// even if it isn't loaded, so a rebuilt submission shows up without removing and re-adding it.
+const SUBMISSION_CSV = "McDonald's_Workers.csv";   // pipeline/submission.py's NAME
+function fillResultPick() {
+  const pick = $("resultPick"); pick.length = 1;
+  for (const name of meta.results) { const o = document.createElement("option"); o.value = o.textContent = name; pick.append(o); }
+}
+async function reloadResults() {
+  const btn = $("reloadBtn"); btn.disabled = true; msg("reloading…");
+  try {
+    meta.results = (await (await fetch("/meta", { cache: "no-store" })).json()).results;
+    fillResultPick();
+    const names = new Set(tracks.filter(t => !t.builtin && meta.results.includes(t.name)).map(t => t.name));
+    if (meta.results.includes(SUBMISSION_CSV)) names.add(SUBMISSION_CSV);
+    const done = [];
+    for (const name of names) {
+      const r = await fetch("/results/" + encodeURIComponent(name), { cache: "no-store" });
+      if (!r.ok) { done.push(`${name}: couldn't read`); continue; }
+      const old = tracks.find(t => t.name === name), { labels } = parseCsv(await r.text(), meta.n_frames);
+      let changed = 0; if (old) for (let f = 0; f < labels.length; f++) if (labels[f] !== old.labels[f]) changed++;
+      addTrack(name, labels, { show: old?.show ?? true });
+      done.push(!old ? `${name} added` : changed ? `${name}: ${changed.toLocaleString()} frames changed` : `${name}: unchanged`);
+    }
+    msg(done.length ? "reloaded " + done.join(" · ") : "nothing from evaluation/results/ to reload");
+    reportSoon();
+  } catch (e) { msg(`reload failed: ${e.message}`); }
+  finally { btn.disabled = false; btn.blur(); }
+}
+$("reloadBtn").onclick = reloadResults;
+let dragDepth = 0;
+const isFiles = e => e.dataTransfer?.types?.includes("Files");   // lane reordering is not a file drop
+addEventListener("dragenter", e => { if (!isFiles(e)) return; e.preventDefault(); dragDepth++; $("drop").style.display = "flex"; });
+addEventListener("dragleave", e => { if (!isFiles(e)) return; if (--dragDepth <= 0) { dragDepth = 0; $("drop").style.display = "none"; } });
+addEventListener("dragover", e => e.preventDefault());
+addEventListener("drop", async e => {
+  if (!isFiles(e)) return;
+  e.preventDefault(); dragDepth = 0; $("drop").style.display = "none";
+  for (const f of e.dataTransfer.files) if (f.name.endsWith(".csv")) await addCsvText(f.name, await f.text());
+});
+
+// ------------------------------------------------------------------------------------ start ----
+(async function start() {
+  meta = await (await fetch("/meta")).json();
+  $("teamH").textContent = meta.teams.H; $("teamA").textContent = meta.teams.A;
+  $("plotH").textContent = meta.teams.H; $("plotA").textContent = meta.teams.A;
+  fillResultPick();
+  if (meta.ball) {
+    ball = new Int16Array(await (await fetch("/ball")).arrayBuffer());
+    if (ball.length !== meta.n_frames * 4) { ball = null; $("ballNote").textContent = "ball file has the wrong size: run with --rebuild"; }
+  } else $("ballNote").textContent = "no ball file: run python3 -m pipeline.viewer --rebuild";
+
+  const saved = loadSaved();
+  await loadNotes();
+  await loadTags();
+  if (meta.diag) {                                   // (N, C) float32, columns named in meta.diag.columns
+    const raw = new Float32Array(await (await fetch("/diag")).arrayBuffer()), n = meta.n_frames;
+    const cols = meta.diag.columns || ["log_odds", "video", "dead", "label"], C = cols.length;
+    if (raw.length === n * C) {
+      const col = (name, Type) => { const j = cols.indexOf(name); if (j < 0) return null; const a = new Type(n); for (let f = 0; f < n; f++) a[f] = raw[C * f + j]; return a; };
+      diag = { lo: col("log_odds", Float32Array), vid: col("video", Float32Array), dead: col("dead", Uint8Array),
+               vit: col("label", Uint8Array), task4: col("task4_dead", Uint8Array), votes: null, meta: meta.diag };
+      if (diag.task4 && meta.diag.dead_weights) {
+        diag.votes = {}; for (const name of Object.keys(meta.diag.dead_weights)) diag.votes[name] = col("vote_" + name, Int8Array);
+      }
+      diag.steps = col("refine_steps", Int32Array);                // bit i: dead after refinement step i
+      diag.speed = col("ball_speed", Float32Array); diag.over = col("ball_over_line_m", Float32Array);
+      diag.kick = col("restart_kick", Uint8Array); diag.carried = col("carried", Uint8Array); diag.vmove = col("video_moving", Uint8Array);
+      diag.white = col("ball_white_px", Float32Array); diag.merged = col("ballless_merged", Uint8Array);
+      diag.pspeed = col("players_speed", Float32Array); diag.pslow = col("players_slowdown", Float32Array); diag.duel = col("duel_stop", Uint8Array);
+    } else msg("diagnostics file has the wrong size: run python -m pipeline.viewer --diagnostics");
+    if (diag && meta.diag.shap) {                    // (N, 2 + 3k) float32: base, rest, top-k index / contribution / value
+      const r = new Float32Array(await (await fetch("/shap")).arrayBuffer());
+      if (r.length === n * (meta.diag.shap.width || 2 + 3 * meta.diag.shap.k)) diag.shap = r;
+      else msg("feature-contribution file has the wrong size: run python -m pipeline.viewer --diagnostics");
+    }
+  }
+  if (saved?.rep) {                                  // the report's choices; tracks that no longer exist fall back to defaults
+    $("repMinor").value = saved.rep.minor ?? "0"; $("repSort").value = saved.rep.sort ?? "time";
+    setTypes([].concat(saved.rep.type || []).filter(k => KINDS[k]));   // a list now; older saves kept one type $("showBand").checked = saved.rep.band ?? true;
+    $("repWhy").open = !!saved.rep.why;
+    costsOpen = saved.rep.costs ?? true;
+    repWant = { repPred: saved.rep.pred || "", repRef: saved.rep.ref || "" };
+    if (saved.rep.ref) repRefChosen = true;
+  }
+  const gt = gtLabels = parseCsv(await (await fetch("/gt")).text(), meta.n_frames).labels;
+  savedOrder = (saved?.tracks || []).map(t => t.name);
+  publicGt = gt;
+  const gtTrack = { id: GT_NAME, name: GT_NAME, labels: gt, show: saved?.tracks?.find(t => t.name === GT_NAME)?.show ?? true,
+                    builtin: true, changes: changesOf(gt) };
+  const want = new URLSearchParams(location.search).get("tracks");     // ?tracks=a.csv,b.csv: exactly these, read fresh
+  for (const t of want !== null ? [] : saved?.tracks || []) {          // in the saved lane order
+    if (t.name === GT_NAME) tracks.push(gtTrack);
+    else if (!t.builtin && t.rle) {
+      const labels = unrle(t.rle, meta.n_frames);
+      tracks.push({ id: t.name, name: t.name, labels, show: t.show, builtin: false, changes: changesOf(labels) });
+    }
+  }
+  if (!tracks.includes(gtTrack)) tracks.unshift(gtTrack);              // removed last time, or a fresh start
+  jumpId = saved?.jump && tracks.some(t => t.id === saved.jump) ? saved.jump : (tracks.find(t => !t.builtin) || tracks[0]).id;
+  renderLanes();
+  setSpeed(saved?.speed ?? 1);                       // after the tracks, so its save can't overwrite them
+  setSound(false, saved?.volume ?? 1);               // a reload starts muted: the browser would block sound anyway
+  for (const name of (want || "").split(",").filter(Boolean)) {         // saved tracks are snapshots: a rebuilt file needs this
+    const r = await fetch("/results/" + encodeURIComponent(name)); if (r.ok) await addCsvText(name, await r.text()); else msg(`couldn't read ${name}`);
+  }
+  // Saved tracks are snapshots: re-read every one that lives in evaluation/results/, so a rebuilt
+  // submission (and its spellF1) shows up on a plain reload. Dropped files stay as saved.
+  if (want === null) await reloadResults();
+  const asked = new URLSearchParams(location.search).get("frame");      // ?frame=12345 links to a frame
+  seek(asked !== null ? +asked : saved?.frame ?? gt.findIndex(c => c));
+})();
+</script>
+</body>
+</html>

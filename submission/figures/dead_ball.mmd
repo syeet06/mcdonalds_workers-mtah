@@ -1,0 +1,12 @@
+flowchart LR
+  S1["<b>Stage 1: six indicators vote</b><br/>ball out of bounds<br/>long gap + set-piece tag<br/>goal ★<br/>ball still<br/>players slow down ★<br/>Smart Tagging ★<br/><i>★ strong: can call a stoppage alone</i><br/><i>others need a second indicator</i>"]
+  EV["<b>Extra evidence</b><br/>set-piece tags<br/>broadcast cut-aways<br/>whistle (audio)<br/>video ball"]
+  S2["<b>Stage 2: refinement steps</b><br/>trim starts still in play<br/>add missed stoppages<br/>snap edges: ball out → restart kick<br/>hold until players restart<br/>bridge gaps, duel-stopped starts<br/>drop very short stoppages"]
+  S1 --> S2
+  EV --> S2
+  S2 -->|"D forced"| VIT["Viterbi<br/>decoder"]
+
+  classDef blue fill:#dbeafe,stroke:#3b82f6,color:#1f2937
+  classDef red fill:#fee2e2,stroke:#ef4444,color:#1f2937
+  class S1,EV blue
+  class S2,VIT red

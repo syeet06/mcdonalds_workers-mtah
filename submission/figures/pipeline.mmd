@@ -1,0 +1,65 @@
+flowchart LR
+  subgraph IN["Provided match assets"]
+    ATD["Tactical tracking (ATD)<br/>players + ball<br/>ball missing on 41% of graded frames"]
+    VID["Tactical video"]
+    AUD["Video audio"]
+    BC["Broadcast tracking<br/>+ homography"]
+    ST["Smart Tagging"]
+  end
+  subgraph EXT["Public external data"]
+    IDSSE["7 IDSSE matches<br/>other games, CC-BY-4.0"]
+  end
+
+  subgraph OFF["Offline training"]
+    DEG["Degrade IDSSE<br/>to look like our tracking"] --> FT1["Feature table<br/>68 features"]
+    FT1 --> XGB["XGBoost<br/>clean + degraded"]
+  end
+
+  IDSSE --> DEG
+  IDSSE -->|"clean copy"| FT1
+
+  subgraph BALL["Ball"]
+    CLN["Clean ball track<br/>remove teleports, fill short gaps"]
+    WASB["WASB detector<br/>fine-tuned on this match"]
+    SQ["White pixels under<br/>the tracked ball"]
+  end
+
+  subgraph POS["Who has it"]
+    FT2["Feature table<br/>(same code)"] --> PH["P(home) per frame"]
+    KP["Keepers assigned<br/>by goal"] --> FT2
+  end
+
+  subgraph DEAD["Is it alive"]
+    DB["Stage 1: six indicators vote"] --> DR["Stage 2: 15 refinement steps"]
+  end
+
+  ATD --> CLN --> FT2
+  ATD --> KP
+  XGB --> PH
+  VID --> WASB
+  VID --> SQ
+  CLN --> DB
+  ST --> DB
+  ST --> DR
+  BC -->|"cut-aways"| DR
+  AUD -->|"whistle"| DR
+  WASB --> DR
+
+  PH -->|"log-odds"| SUM(("+"))
+  WASB -->|"closer team<br/>× 2"| SUM
+  SUM --> VIT["Viterbi per half<br/>switch cost 24"]
+  DR -->|"D forced"| VIT
+  VIT --> MRG["Possession rules<br/>(section 7)"]
+  SQ --> MRG
+  MRG --> OUT["frame,label CSV"]
+
+  classDef blue fill:#dbeafe,stroke:#3b82f6,color:#1f2937
+  classDef red fill:#fee2e2,stroke:#ef4444,color:#1f2937
+  class IDSSE,DEG,FT1,XGB,FT2,PH,KP,SUM blue
+  class CLN,WASB,SQ blue
+  class DB,DR red
+  class VIT,MRG red
+  style OFF fill:#eff6ff,stroke:#3b82f6
+  style POS fill:#eff6ff,stroke:#3b82f6
+  style BALL fill:#eff6ff,stroke:#3b82f6
+  style DEAD fill:#fef2f2,stroke:#ef4444

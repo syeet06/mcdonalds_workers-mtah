@@ -1,0 +1,10 @@
+# The pipeline (pipeline/*.py). Pinned so the submission regenerates identically.
+# Needs Python 3.12: scipy 1.17.1 has no builds for newer versions such as 3.15.
+numpy==2.5.4
+pandas==3.1.1
+scikit-learn==1.9.1
+scipy==1.17.1
+xgboost==3.4.1
+kloppy==3.19.1
+opencv-python-headless==5.0.0.93   # the ball square's colour test (pipeline/ball_seen.py)
+av==19.0.2                 # reads the tactical video's audio for the whistle (pipeline/whistle.py)

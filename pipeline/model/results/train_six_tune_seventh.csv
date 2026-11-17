@@ -1,0 +1,4 @@
+option,val,trees,max_depth,min_child_weight,deg_n,deg_accuracy,deg_log_loss,deg_auc,deg_acc_ball_seen,deg_acc_ball_missing,deg_share_ball_missing,deg_acc_smooth25,clean_n,clean_accuracy,clean_log_loss,clean_auc,clean_acc_ball_seen,clean_acc_ball_missing,clean_share_ball_missing,clean_acc_smooth25
+clean,J03WR9,207,8,1,85316,0.8984,0.2517,0.9591,0.9161,0.8499,0.2670,0.8970,85316,0.9304,0.1664,0.9822,0.9304,,0.0000,0.9255
+degraded,J03WR9,211,8,10,85316,0.9101,0.2157,0.9702,0.9141,0.8991,0.2670,0.9069,85316,0.9276,0.1736,0.9805,0.9276,,0.0000,0.9226
+both,J03WR9,160,8,10,85316,0.9109,0.2098,0.9719,0.9165,0.8953,0.2670,0.9056,85316,0.9292,0.1690,0.9816,0.9292,,0.0000,0.9236

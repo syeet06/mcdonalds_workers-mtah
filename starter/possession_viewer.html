@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Possession Viewer</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #d9d9d4;
+    --grass: #e8efe6; --pitch-line: #a9b8a5;
+    --home: #2563c9; --away: #c9452f; --dead: #8a8a84; --none: #e6e6e1; --wrong: #d11f1f;
+    --ball: #1d1d1b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161615; --panel: #1f1f1d; --ink: #ecece8; --muted: #a0a09a; --line: #34342f;
+      --grass: #1d2a1d; --pitch-line: #3f5540; --none: #2c2c29; --ball: #f4f4f0;
+      --home: #5b8fe6; --away: #e6735c; --dead: #8f8f88; --wrong: #ff4d4d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161615; --panel: #1f1f1d; --ink: #ecece8; --muted: #a0a09a; --line: #34342f;
+    --grass: #1d2a1d; --pitch-line: #3f5540; --none: #2c2c29; --ball: #f4f4f0;
+    --home: #5b8fe6; --away: #e6735c; --dead: #8f8f88; --wrong: #ff4d4d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; margin-bottom: 12px; }
+  h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  .muted { color: var(--muted); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+  canvas { display: block; width: 100%; }
+  #status { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 0 8px; font-variant-numeric: tabular-nums; }
+  .chip { display: inline-block; min-width: 22px; text-align: center; padding: 1px 6px; border-radius: 4px;
+          color: #fff; font-weight: 600; }
+  .H { background: var(--home); } .A { background: var(--away); } .D { background: var(--dead); }
+  .X { background: var(--none); color: var(--muted); }
+  .bad { color: var(--wrong); font-weight: 600; }
+  #controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  button, select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+                   border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Possession Viewer</h1>
+    <span class="muted" id="name"></span>
+  </header>
+  <div class="panel">
+    <canvas id="pitch" aria-label="pitch with tracked players and ball"></canvas>
+    <div id="status"></div>
+    <canvas id="timeline" aria-label="timeline: truth, prediction, errors. Click to seek." style="cursor:pointer"></canvas>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--home)"></span>H home</span>
+      <span><span class="sw" style="background:var(--away)"></span>A away</span>
+      <span><span class="sw" style="background:var(--dead)"></span>D dead</span>
+      <span><span class="sw" style="background:var(--none)"></span>X none</span>
+      <span><span class="sw" style="background:var(--wrong)"></span>wrong (graded frames)</span>
+      <span>rows: truth · prediction · errors</span>
+    </div>
+    <div id="controls">
+      <button id="prevErr" title="p">◀ prev error</button>
+      <button id="back" title="shift+left">−1 s</button>
+      <button id="play" title="space">▶ play</button>
+      <button id="fwd" title="shift+right">+1 s</button>
+      <button id="nextErr" title="n">next error ▶</button>
+      <label class="muted">speed
+        <select id="speed"><option>0.25</option><option>0.5</option><option selected>1</option><option>2</option><option>4</option></select>
+      </label>
+      <span class="muted">keys: space · ←/→ frame · shift ±1 s · n/p error</span>
+    </div>
+  </div>
+</main>
+<script>
+const DATA = /*__PAYLOAD__*/null;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const N = DATA.frames.length, [PL, PW] = DATA.pitch;
+const wrong = new Uint8Array(N);
+for (let i = 0; i < N; i++) wrong[i] = DATA.gt[i] !== "X" && DATA.pred[i] !== DATA.gt[i] ? 1 : 0;
+const errStarts = [];
+for (let i = 0; i < N; i++) if (wrong[i] && (i === 0 || !wrong[i - 1])) errStarts.push(i);
+
+let cur = 0, playing = false, speed = 1, last = 0, acc = 0;
+const pitch = document.getElementById("pitch"), tl = document.getElementById("timeline");
+document.getElementById("name").textContent =
+  `${DATA.name} · frames ${DATA.start}–${DATA.start + N - 1} · ${errStarts.length} error stretches`;
+
+function size(c, h) {
+  const r = window.devicePixelRatio || 1, w = c.clientWidth;
+  c.width = w * r; c.height = h * r; c.style.height = h + "px";
+  const g = c.getContext("2d"); g.setTransform(r, 0, 0, r, 0, 0); return [g, w, h];
+}
+
+function drawPitch() {
+  const w0 = pitch.clientWidth, h0 = Math.min(w0 * PW / PL, window.innerHeight * 0.55);
+  const [g, w, h] = size(pitch, h0);
+  const s = Math.min(w / (PL + 6), h / (PW + 6)), ox = (w - PL * s) / 2, oy = (h - PW * s) / 2;
+  const X = x => ox + x * s, Y = y => oy + y * s;
+  g.fillStyle = css("--grass"); g.fillRect(0, 0, w, h);
+  g.strokeStyle = css("--pitch-line"); g.lineWidth = 1.5;
+  g.strokeRect(X(0), Y(0), PL * s, PW * s);
+  g.beginPath(); g.moveTo(X(PL / 2), Y(0)); g.lineTo(X(PL / 2), Y(PW)); g.stroke();
+  g.beginPath(); g.arc(X(PL / 2), Y(PW / 2), 9.15 * s, 0, 2 * Math.PI); g.stroke();
+  for (const [x0, dir] of [[0, 1], [PL, -1]]) {
+    g.strokeRect(Math.min(X(x0), X(x0 + dir * 16.5)), Y(PW / 2 - 20.16), 16.5 * s, 40.32 * s);
+    g.strokeRect(Math.min(X(x0), X(x0 + dir * 5.5)), Y(PW / 2 - 9.16), 5.5 * s, 18.32 * s);
+  }
+  const f = DATA.frames[cur], col = [css("--home"), css("--away")];
+  for (const [x, y, slot] of f.p) {
+    g.fillStyle = col[DATA.team[slot]];
+    g.beginPath(); g.arc(X(x), Y(y), Math.max(4, 0.9 * s), 0, 2 * Math.PI); g.fill();
+  }
+  if (f.b) {
+    g.fillStyle = css("--ball"); g.strokeStyle = css("--grass"); g.lineWidth = 2;
+    g.beginPath(); g.arc(X(f.b[0]), Y(f.b[1]), Math.max(3, 0.55 * s), 0, 2 * Math.PI); g.fill(); g.stroke();
+  } else {
+    g.fillStyle = css("--muted"); g.font = "12px system-ui"; g.fillText("ball not tracked", X(1), Y(PW) + 14 > h ? h - 4 : Y(PW) + 14);
+  }
+}
+
+function drawTimeline() {
+  const [g, w] = size(tl, 54), row = 14, gap = 4, colors = { H: css("--home"), A: css("--away"), D: css("--dead"), X: css("--none") };
+  const px = w / N;
+  for (let x = 0; x < w; x++) {
+    const i = Math.min(N - 1, Math.floor(x / px)), j = Math.min(N, Math.max(i + 1, Math.floor((x + 1) / px)));
+    g.fillStyle = colors[DATA.gt[i]]; g.fillRect(x, 0, 1, row);
+    g.fillStyle = colors[DATA.pred[i]]; g.fillRect(x, row + gap, 1, row);
+    let bad = 0; for (let k = i; k < j; k++) bad |= wrong[k];
+    g.fillStyle = bad ? css("--wrong") : css("--none"); g.fillRect(x, 2 * (row + gap), 1, row);
+  }
+  g.fillStyle = css("--ink"); g.fillRect(Math.floor(cur * px), 0, 2, 54);
+}
+
+function chip(l) { return `<span class="chip ${l}">${l}</span>`; }
+function drawStatus() {
+  const f = DATA.frames[cur], p = DATA.pred[cur], t = DATA.gt[cur];
+  const frame = DATA.start + cur, secs = (cur / 25).toFixed(2);
+  document.getElementById("status").innerHTML =
+    `<span>frame <b>${frame}</b> <span class="muted">(+${secs} s)</span></span>` +
+    `<span>truth ${chip(t)}</span><span>prediction ${chip(p)}</span>` +
+    (wrong[cur] ? `<span class="bad">wrong</span>` : t === "X" ? `<span class="muted">not graded</span>` : `<span>ok</span>`) +
+    `<span class="muted">${f.p.length} players · ball ${f.b ? "tracked" : "missing"}</span>`;
+}
+
+function render() { drawPitch(); drawTimeline(); drawStatus(); }
+function seek(i) { cur = Math.max(0, Math.min(N - 1, i)); render(); }
+function setPlaying(v) { playing = v; document.getElementById("play").textContent = v ? "❚❚ pause" : "▶ play"; if (v) { last = performance.now(); acc = 0; requestAnimationFrame(tick); } }
+function tick(now) {
+  if (!playing) return;
+  acc += (now - last) * 25 * speed / 1000; last = now;
+  const step = Math.floor(acc);
+  if (step) { acc -= step; if (cur + step >= N - 1) { seek(N - 1); setPlaying(false); return; } seek(cur + step); }
+  requestAnimationFrame(tick);
+}
+function nextErr() { const i = errStarts.find(s => s > cur); if (i !== undefined) seek(i); }
+function prevErr() { const c = errStarts.filter(s => s < cur); if (c.length) seek(c[c.length - 1]); }
+
+document.getElementById("play").onclick = () => setPlaying(!playing);
+document.getElementById("back").onclick = () => seek(cur - 25);
+document.getElementById("fwd").onclick = () => seek(cur + 25);
+document.getElementById("nextErr").onclick = nextErr;
+document.getElementById("prevErr").onclick = prevErr;
+document.getElementById("speed").onchange = e => { speed = +e.target.value; };
+tl.onclick = e => { const r = tl.getBoundingClientRect(); seek(Math.floor((e.clientX - r.left) / r.width * N)); };
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "SELECT") return;
+  if (e.key === " ") { e.preventDefault(); setPlaying(!playing); }
+  else if (e.key === "ArrowRight") seek(cur + (e.shiftKey ? 25 : 1));
+  else if (e.key === "ArrowLeft") seek(cur - (e.shiftKey ? 25 : 1));
+  else if (e.key === "n") nextErr();
+  else if (e.key === "p") prevErr();
+});
+window.addEventListener("resize", render);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+render();
+</script>
+</body>
+</html>

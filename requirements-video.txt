@@ -1,0 +1,19 @@
+# Video tooling for pipeline/ball_video*.py and pipeline/wasb (the WASB ball detector).
+# Separate from requirements.txt so the scorer stays dependency-light.
+# Needs Python 3.12: torch 2.9.1 has no builds for newer versions such as 3.15.
+#
+# torch is pinned: 2.15 crashes in the MPS backend on macOS 14.3; 2.9.1 works on an M1.
+#
+#     python3.12 -m venv --clear .venv-video && .venv-video/bin/pip install -r requirements-video.txt
+-r pipeline/requirements.txt
+
+torch==2.9.1
+torchvision==0.24.1
+opencv-python-headless==5.0.0.93          # its FFmpeg decode and resize feed the detector
+omegaconf
+pyyaml
+pyarrow
+scikit-learn==1.9.1
+pytest
+matplotlib
+ipykernel                       # run the task3 notebook in this environment
