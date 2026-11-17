@@ -16,6 +16,14 @@
 
 </div>
 
+> [!NOTE]
+> **Reading the technical document?** [`submission/McDonald's_Workers.md`](submission/McDonald's_Workers.md)
+> is identical to the `McDonald's_Workers.md` we submitted, with its figures and diagrams rendered.
+>
+> **Need help or have a question?** Email us at
+> [chi.tsang.25@ucl.ac.uk](mailto:chi.tsang.25@ucl.ac.uk?subject=McDonald%27s%20Workers%20submission%20%28More%20than%20a%20Hack%202027%29),
+> [sui.lim.25@ucl.ac.uk](mailto:sui.lim.25@ucl.ac.uk?subject=McDonald%27s%20Workers%20submission%20%28More%20than%20a%20Hack%202027%29) or [andreea.balmus.25@ucl.ac.uk](mailto:andreea.balmus.25@ucl.ac.uk?subject=McDonald%27s%20Workers%20submission%20%28More%20than%20a%20Hack%202027%29).
+
 ---
 
 ## Overview
@@ -149,7 +157,7 @@ the data terms don't allow us to publish. The submission needs it, so either:
 - **Build it** with the two commands below (~11.6 h on an Apple M1; resumes if interrupted). This only
   runs the committed fine-tuned detector (`weights/ball_video_finetuned.pt`) over the video; nothing is
   trained.
-- **Or email us for our copy:** [chi.tsang.25@ucl.ac.uk](mailto:chi.tsang.25@ucl.ac.uk?subject=Request%20for%20ball_video.npz%20%28McDonald%27s%20Workers%2C%20More%20than%20a%20Hack%202027%29&body=Hi%2C%0A%0AI%27m%20reproducing%20the%20McDonald%27s%20Workers%20submission%20for%20More%20than%20a%20Hack%202027.%20Could%20you%20please%20send%20me%20your%20copy%20of%20ball_video.npz%2C%20the%20ball%20detector%27s%20output%20on%20the%20match%20video%2C%20so%20I%20can%20run%20the%20pipeline%20without%20building%20it%3F%0A%0AThanks%2C%0A) or [sui.lim.25@ucl.ac.uk](mailto:sui.lim.25@ucl.ac.uk?subject=Request%20for%20ball_video.npz%20%28McDonald%27s%20Workers%2C%20More%20than%20a%20Hack%202027%29&body=Hi%2C%0A%0AI%27m%20reproducing%20the%20McDonald%27s%20Workers%20submission%20for%20More%20than%20a%20Hack%202027.%20Could%20you%20please%20send%20me%20your%20copy%20of%20ball_video.npz%2C%20the%20ball%20detector%27s%20output%20on%20the%20match%20video%2C%20so%20I%20can%20run%20the%20pipeline%20without%20building%20it%3F%0A%0AThanks%2C%0A). Put it at
+- **Or email us for our copy:** [chi.tsang.25@ucl.ac.uk](mailto:chi.tsang.25@ucl.ac.uk?subject=Request%20for%20ball_video.npz%20%28McDonald%27s%20Workers%2C%20More%20than%20a%20Hack%202027%29&body=Hi%2C%0A%0AI%27m%20reproducing%20the%20McDonald%27s%20Workers%20submission%20for%20More%20than%20a%20Hack%202027.%20Could%20you%20please%20send%20me%20your%20copy%20of%20ball_video.npz%2C%20the%20ball%20detector%27s%20output%20on%20the%20match%20video%2C%20so%20I%20can%20run%20the%20pipeline%20without%20building%20it%3F%0A%0AThanks%2C%0A), [sui.lim.25@ucl.ac.uk](mailto:sui.lim.25@ucl.ac.uk?subject=Request%20for%20ball_video.npz%20%28McDonald%27s%20Workers%2C%20More%20than%20a%20Hack%202027%29&body=Hi%2C%0A%0AI%27m%20reproducing%20the%20McDonald%27s%20Workers%20submission%20for%20More%20than%20a%20Hack%202027.%20Could%20you%20please%20send%20me%20your%20copy%20of%20ball_video.npz%2C%20the%20ball%20detector%27s%20output%20on%20the%20match%20video%2C%20so%20I%20can%20run%20the%20pipeline%20without%20building%20it%3F%0A%0AThanks%2C%0A) or [andreea.balmus.25@ucl.ac.uk](mailto:andreea.balmus.25@ucl.ac.uk?subject=Request%20for%20ball_video.npz%20%28McDonald%27s%20Workers%2C%20More%20than%20a%20Hack%202027%29&body=Hi%2C%0A%0AI%27m%20reproducing%20the%20McDonald%27s%20Workers%20submission%20for%20More%20than%20a%20Hack%202027.%20Could%20you%20please%20send%20me%20your%20copy%20of%20ball_video.npz%2C%20the%20ball%20detector%27s%20output%20on%20the%20match%20video%2C%20so%20I%20can%20run%20the%20pipeline%20without%20building%20it%3F%0A%0AThanks%2C%0A). Put it at
   `weights/ball_video.npz` (or `pipeline/cache/ball_video/ball_video.npz`). Those are the only two
   places the pipeline looks: `pipeline/cache/ball_video.npz`, for example, is not read.
 
